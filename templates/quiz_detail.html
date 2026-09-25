@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block title %}{{ quiz['title'] }} | EduGap AI{% endblock %}
+
+{% block header_title %}Adaptive Assessment Session{% endblock %}
+
+{% block content %}
+<style>
+    .quiz-container {
+        max-width: 800px;
+        margin: 0 auto;
+    }
+    .question-block {
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-lg);
+        padding: 24px;
+        margin-bottom: 20px;
+    }
+    .question-title {
+        font-family: 'Outfit', sans-serif;
+        font-size: 16px;
+        font-weight: 600;
+        color: #ffffff;
+        margin-bottom: 16px;
+        display: flex;
+        gap: 10px;
+    }
+    .option-label {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        background: rgba(19, 29, 49, 0.6);
+        border: 1px solid var(--border-color);
+        padding: 12px 16px;
+        border-radius: var(--radius-md);
+        margin-bottom: 10px;
+        cursor: pointer;
+        transition: var(--transition);
+        font-size: 14px;
+    }
+    .option-label:hover {
+        background: rgba(99, 102, 241, 0.1);
+        border-color: var(--primary);
+    }
+    .option-label input[type="radio"] {
+        accent-color: var(--primary);
+        width: 16px;
+        height: 16px;
+    }
+</style>
+
+<div class="quiz-container">
+    <div style="margin-bottom: 20px;">
+        <a href="{{ url_for('quizzes_page') }}" class="btn btn-secondary btn-sm">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+            <span>Back to Quizzes</span>
+        </a>
+    </div>
+
+    <div class="card" style="margin-bottom: 24px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+            <div>
+                <span class="badge badge-neutral" style="margin-bottom: 6px;">{{ quiz['subject'] }} &bull; {{ quiz['topic_name'] }}</span>
+                <h1 style="font-family: 'Outfit', sans-serif; font-size: 22px; color: #ffffff;">{{ quiz['title'] }}</h1>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; color: var(--text-secondary); font-size: 13px;">
+                <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                <span>Estimated Time: {{ quiz['duration'] }} Mins</span>
+            </div>
+        </div>
+        <p style="color: var(--text-secondary); font-size: 13.5px; margin-top: 10px;">
+            {{ quiz['description'] }}
+        </p>
+    </div>
+
+    <form method="POST" action="{{ url_for('quiz_detail', quiz_id=quiz['id']) }}">
+        {% for q in questions %}
+        <div class="question-block">
+            <div class="question-title">
+                <span style="color: var(--primary);">Q{{ loop.index }}.</span>
+                <span>{{ q['question'] }}</span>
+            </div>
+            
+            <div class="options-group">
+                <label class="option-label">
+                    <input type="radio" name="question_{{ q['id'] }}" value="A" required>
+                    <span><strong>A.</strong> {{ q['option_a'] }}</span>
+                </label>
+                <label class="option-label">
+                    <input type="radio" name="question_{{ q['id'] }}" value="B">
+                    <span><strong>B.</strong> {{ q['option_b'] }}</span>
+                </label>
+                <label class="option-label">
+                    <input type="radio" name="question_{{ q['id'] }}" value="C">
+                    <span><strong>C.</strong> {{ q['option_c'] }}</span>
+                </label>
+                <label class="option-label">
+                    <input type="radio" name="question_{{ q['id'] }}" value="D">
+                    <span><strong>D.</strong> {{ q['option_d'] }}</span>
+                </label>
+            </div>
+        </div>
+        {% endfor %}
+
+        <div style="margin-top: 24px; text-align: right;">
+            <button type="submit" class="btn btn-primary" style="padding: 12px 28px; font-size: 15px;">
+                <span>Submit & Calculate Gap</span>
+                <svg class="icon" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

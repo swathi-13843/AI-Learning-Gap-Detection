@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+
+{% block title %}Student Assessment: {{ student['student_id'] if student else 'Not Found' }} | EduGap AI{% endblock %}
+
+{% block header_title %}Student Deep Dive Assessment{% endblock %}
+
+{% block content %}
+<style>
+    .breadcrumb-nav {
+        margin-bottom: 20px;
+    }
+    .assessment-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 24px;
+        margin-bottom: 28px;
+    }
+    @media (max-width: 900px) {
+        .assessment-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+
+<div class="breadcrumb-nav">
+    <a href="{{ url_for('dashboard') }}" class="btn btn-secondary btn-sm">
+        <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+        <span>Return to Dashboard</span>
+    </a>
+</div>
+
+{% if student %}
+<!-- Student Header Card -->
+<div class="card" style="margin-bottom: 24px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+        <div style="display: flex; align-items: center; gap: 16px;">
+            <div style="width: 56px; height: 56px; border-radius: 50%; background: var(--primary); display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 700; color: #ffffff;">
+                {{ (student['name'] if student['name'] else 'S')[0]|upper }}
+            </div>
+            <div>
+                <h2 style="font-family: 'Outfit', sans-serif; font-size: 22px; color: #ffffff;">{{ student['name'] if student['name'] else "Student " ~ student['student_id'] }}</h2>
+                <div style="color: var(--text-secondary); font-size: 13.5px;">
+                    <span>ID: {{ student['student_id'] }}</span> &bull; 
+                    <span>Department: {{ student['department'] if student['department'] else 'Computer Science' }}</span>
+                </div>
+            </div>
+        </div>
+        <div>
+            {% if student['overall_risk'] == 'High Risk' %}
+                <span class="badge badge-high" style="font-size: 14px; padding: 6px 14px;">High Risk Category</span>
+            {% elif student['overall_risk'] == 'Medium Risk' %}
+                <span class="badge badge-medium" style="font-size: 14px; padding: 6px 14px;">Medium Risk Category</span>
+            {% else %}
+                <span class="badge badge-low" style="font-size: 14px; padding: 6px 14px;">Low Risk Category</span>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Performance Summary Cards -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px;">
+    <div class="card" style="padding: 16px;">
+        <span style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">Average Quiz Score</span>
+        <div style="font-size: 24px; font-weight: 700; color: #ffffff; margin-top: 4px;">{{ "%.1f"|format(student['average_quiz_score']) }}%</div>
+    </div>
+    <div class="card" style="padding: 16px;">
+        <span style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">Assignment Score</span>
+        <div style="font-size: 24px; font-weight: 700; color: #ffffff; margin-top: 4px;">{{ "%.1f"|format(student['average_assignment_score']) }}%</div>
+    </div>
+    <div class="card" style="padding: 16px;">
+        <span style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">Learning Gap Index</span>
+        <div style="font-size: 24px; font-weight: 700; color: {% if student['average_learning_gap'] >= 60 %}#f87171{% elif student['average_learning_gap'] >= 30 %}#fbbf24{% else %}#34d399{% endif %}; margin-top: 4px;">
+            {{ "%.1f"|format(student['average_learning_gap']) }}%
+        </div>
+    </div>
+    <div class="card" style="padding: 16px;">
+        <span style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">Cohort Attendance</span>
+        <div style="font-size: 24px; font-weight: 700; color: #ffffff; margin-top: 4px;">{{ "%.1f"|format(student['average_attendance']) }}%</div>
+    </div>
+</div>
+
+<!-- Deep Dive Sections -->
+<div class="assessment-grid">
+    <!-- Gaps Table -->
+    <div class="card">
+        <div class="card-header">
+            <h3>
+                <svg class="icon" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                <span>Identified Topic Gaps</span>
+            </h3>
+        </div>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Topic</th>
+                        <th>Gap Index</th>
+                        <th>Classification</th>
+                        <th>Priority</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for g in gaps %}
+                    <tr>
+                        <td style="font-weight: 600;">{{ g['topic'] }}</td>
+                        <td>{{ "%.1f"|format(g['learning_gap_score']) }}%</td>
+                        <td>
+                            {% if g['gap_category'] == 'High Gap' or g['gap_category'] == 'High' %}
+                            <span class="badge badge-high">Critical</span>
+                            {% elif g['gap_category'] == 'Medium Gap' or g['gap_category'] == 'Medium' %}
+                            <span class="badge badge-medium">Moderate</span>
+                            {% else %}
+                            <span class="badge badge-low">Normal</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge badge-neutral">{{ g['priority'] }}</span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Recommendations -->
+    <div class="card">
+        <div class="card-header">
+            <h3>
+                <svg class="icon" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                <span>Prescribed AI Interventions</span>
+            </h3>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 12px; max-height: 480px; overflow-y: auto;">
+            {% for r in recommendations %}
+            <div style="background: rgba(19, 29, 49, 0.6); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 14px;">
+                <div style="font-weight: 600; color: var(--primary); font-size: 13.5px; margin-bottom: 4px;">{{ r['topic'] }}</div>
+                <div style="font-size: 13px; color: var(--text-secondary); line-height: 1.5;">{{ r['recommendation'] }}</div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+{% else %}
+<div class="card" style="text-align: center; padding: 48px;">
+    <h2>Student record not found</h2>
+    <p style="color: var(--text-secondary); margin-top: 8px;">The requested academic identifier does not correspond to an enrolled learner.</p>
+</div>
+{% endif %}
+
+{% endblock %}

@@ -1,0 +1,226 @@
+{% extends "base.html" %}
+
+{% block title %}Assessments & Projects | EduGap AI{% endblock %}
+
+{% block header_title %}Curriculum Assessments & Project Submissions{% endblock %}
+
+{% block content %}
+<style>
+    .assignment-list {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+    }
+    .assignment-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-lg);
+        padding: 24px;
+        transition: var(--transition);
+    }
+    .assignment-card:hover {
+        border-color: rgba(99, 102, 241, 0.4);
+    }
+    .assignment-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 16px;
+        flex-wrap: wrap;
+        margin-bottom: 12px;
+    }
+    .assignment-title {
+        font-family: 'Outfit', sans-serif;
+        font-size: 18px;
+        font-weight: 600;
+        color: #ffffff;
+        margin-bottom: 6px;
+    }
+    .assignment-desc {
+        font-size: 13.5px;
+        color: var(--text-secondary);
+        line-height: 1.6;
+        margin-bottom: 18px;
+    }
+    .submission-box {
+        background: rgba(15, 23, 42, 0.6);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
+        padding: 20px;
+        margin-top: 16px;
+    }
+    .submission-box h4 {
+        font-size: 13px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--text-primary);
+        margin-bottom: 14px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .form-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 16px;
+        margin-bottom: 14px;
+    }
+    .form-group {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+    .form-group label {
+        font-size: 12.5px;
+        font-weight: 500;
+        color: var(--text-secondary);
+    }
+    .form-group label span.opt {
+        color: var(--text-muted);
+        font-weight: 400;
+        font-size: 11.5px;
+    }
+    .form-control-file {
+        background: #0f172a;
+        border: 1px dashed #475569;
+        border-radius: var(--radius-md);
+        padding: 9px 12px;
+        color: var(--text-primary);
+        font-size: 12.5px;
+        cursor: pointer;
+        transition: var(--transition);
+        width: 100%;
+    }
+    .form-control-file:hover {
+        border-color: var(--primary);
+    }
+    .submitted-banner {
+        background: rgba(16, 185, 129, 0.1);
+        border: 1px solid rgba(16, 185, 129, 0.3);
+        border-radius: var(--radius-md);
+        padding: 14px 18px;
+        margin-top: 16px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+    .submitted-info {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        font-size: 13px;
+    }
+    .submitted-info .repo-link {
+        color: var(--primary);
+        text-decoration: underline;
+        font-family: monospace;
+        font-size: 12px;
+    }
+</style>
+
+<div class="card" style="margin-bottom: 24px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+        <div>
+            <h2 style="font-family: 'Outfit', sans-serif; font-size: 20px; color: #ffffff; margin-bottom: 4px;">Hands-on Curriculum Tasks & Assessments</h2>
+            <p style="color: var(--text-secondary); font-size: 13.5px;">Practical implementations evaluating code architecture, algorithmic proficiency, and machine learning models.</p>
+        </div>
+        <span class="badge badge-neutral">Tasks Enrolled: {{ assignments|length }}</span>
+    </div>
+</div>
+
+<div class="assignment-list">
+    {% for a in assignments %}
+    {% set sub = submission_map.get(a['id']) %}
+    <div class="assignment-card">
+        <div class="assignment-header">
+            <div>
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                    <span class="badge badge-neutral" style="font-size: 11px;">{{ a['subject'] }} &bull; {{ a['topic_name'] }}</span>
+                    <span style="font-size: 12px; color: var(--text-muted);">Due: {{ a['due_date'] }}</span>
+                    {% if sub %}
+                        <span class="badge badge-low" style="font-size: 11px;">Submitted</span>
+                    {% else %}
+                        <span class="badge badge-medium" style="font-size: 11px;">Pending Submission</span>
+                    {% endif %}
+                </div>
+                <h3 class="assignment-title">{{ a['title'] }}</h3>
+            </div>
+            <div style="text-align: right;">
+                <div style="font-size: 11px; text-transform: uppercase; color: var(--text-muted);">Maximum Score</div>
+                <div style="font-size: 20px; font-weight: 700; color: #ffffff;">{{ a['max_score']|int }} Pts</div>
+            </div>
+        </div>
+
+        <p class="assignment-desc">{{ a['description'] }}</p>
+
+        {% if sub %}
+        <div class="submitted-banner">
+            <div class="submitted-info">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <svg class="icon icon-sm" style="stroke: #34d399;" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+                    <strong style="color: #34d399;">Submission Confirmed</strong>
+                    <span style="color: var(--text-muted); font-size: 11.5px;">(Score: {{ sub['score']|int }}/{{ a['max_score']|int }})</span>
+                </div>
+                {% if sub['file_name'] %}
+                <div style="color: var(--text-secondary); font-size: 12px;">
+                    Uploaded File: <strong style="color: #ffffff;">{{ sub['file_name'] }}</strong>
+                </div>
+                {% endif %}
+                {% if sub['github_repo'] %}
+                <div>
+                    GitHub Repository: <a href="{{ sub['github_repo'] }}" target="_blank" rel="noopener" class="repo-link">{{ sub['github_repo'] }}</a>
+                </div>
+                {% endif %}
+                {% if sub['comments'] %}
+                <div style="color: var(--text-muted); font-size: 12px; font-style: italic;">
+                    Notes: "{{ sub['comments'] }}"
+                </div>
+                {% endif %}
+            </div>
+            <div>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('form-{{ a['id'] }}').style.display = (document.getElementById('form-{{ a['id'] }}').style.display === 'none' ? 'block' : 'none');">
+                    <span>Resubmit Project</span>
+                </button>
+            </div>
+        </div>
+        {% endif %}
+
+        <div id="form-{{ a['id'] }}" class="submission-box" {% if sub %}style="display: none;"{% endif %}>
+            <h4>
+                <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                <span>Project Deliverable Submission</span>
+            </h4>
+            
+            <form method="POST" action="{{ url_for('submit_assignment', assignment_id=a['id']) }}" enctype="multipart/form-data">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="file_{{ a['id'] }}">Upload Your Work <span style="color: #f87171;">*</span></label>
+                        <input type="file" id="file_{{ a['id'] }}" name="submission_file" class="form-control-file" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="repo_{{ a['id'] }}">GitHub Repository Link <span class="opt">(optional)</span></label>
+                        <input type="url" id="repo_{{ a['id'] }}" name="github_repo" class="form-control" placeholder="https://github.com/username/project-repo" value="{{ sub['github_repo'] if sub and sub['github_repo'] else '' }}">
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label for="comments_{{ a['id'] }}">Student Comments <span class="opt">(optional)</span></label>
+                    <textarea id="comments_{{ a['id'] }}" name="comments" class="form-control" rows="2" placeholder="Key implementation highlights, execution instructions, or challenges faced...">{{ sub['comments'] if sub and sub['comments'] else '' }}</textarea>
+                </div>
+
+                <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                    <button type="submit" class="btn btn-primary btn-sm">
+                        <svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+                        <span>Submit Deliverable</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

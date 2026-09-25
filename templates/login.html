@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign In | EduGap AI</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --bg-body: #0b0f19;
+            --bg-card: #1e293b;
+            --border-color: #334155;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --primary: #6366f1;
+            --primary-hover: #4f46e5;
+            --danger: #ef4444;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-body);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+
+        .icon {
+            display: inline-flex;
+            width: 18px;
+            height: 18px;
+            stroke-width: 2;
+            stroke: currentColor;
+            fill: none;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .auth-container {
+            width: 100%;
+            max-width: 440px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 36px 32px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+        }
+
+        .auth-header {
+            text-align: center;
+            margin-bottom: 28px;
+        }
+
+        .brand-badge {
+            width: 48px;
+            height: 48px;
+            margin: 0 auto 16px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, var(--primary), #a855f7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #ffffff;
+            box-shadow: 0 4px 16px rgba(99, 102, 241, 0.35);
+        }
+
+        .auth-header h1 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 24px;
+            font-weight: 700;
+            color: #ffffff;
+            margin-bottom: 6px;
+        }
+
+        .auth-header p {
+            font-size: 13.5px;
+            color: var(--text-secondary);
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+
+        .form-control {
+            width: 100%;
+            background: #131d31;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 12px 14px;
+            color: #ffffff;
+            font-size: 14px;
+            outline: none;
+            transition: all 0.2s;
+        }
+
+        .form-control:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+        }
+
+        .btn-submit {
+            width: 100%;
+            background: var(--primary);
+            color: #ffffff;
+            border: none;
+            border-radius: 8px;
+            padding: 12px;
+            font-size: 14.5px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: all 0.2s;
+            margin-top: 10px;
+        }
+
+        .btn-submit:hover {
+            background: var(--primary-hover);
+            box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
+        }
+
+        .test-accounts-box {
+            margin-top: 24px;
+            padding: 14px;
+            background: #131d31;
+            border: 1px dashed var(--border-color);
+            border-radius: 8px;
+        }
+
+        .test-accounts-title {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-secondary);
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .quick-fill-btns {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .btn-chip {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 8px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+            text-align: left;
+            transition: all 0.15s;
+        }
+
+        .btn-chip:hover {
+            background: rgba(99, 102, 241, 0.15);
+            border-color: var(--primary);
+            color: #ffffff;
+        }
+
+        .btn-chip strong {
+            display: block;
+            color: #ffffff;
+            font-size: 12.5px;
+        }
+
+        .auth-footer {
+            margin-top: 24px;
+            text-align: center;
+            font-size: 13.5px;
+            color: var(--text-secondary);
+        }
+
+        .auth-footer a {
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .auth-footer a:hover {
+            text-decoration: underline;
+        }
+
+        .alert-error {
+            background: rgba(239, 68, 68, 0.15);
+            border: 1px solid var(--danger);
+            color: #f87171;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 13px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="auth-container">
+    <div class="auth-header">
+        <div class="brand-badge">
+            <svg class="icon" style="width:24px; height:24px;" viewBox="0 0 24 24">
+                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+            </svg>
+        </div>
+        <h1>EduGap AI Platform</h1>
+        <p>Enterprise Academic Intelligence Portal</p>
+    </div>
+
+    {% with messages = get_flashed_messages() %}
+        {% if messages %}
+            {% for msg in messages %}
+                <div class="alert-error">
+                    <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    <span>{{ msg }}</span>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <!-- STEP 1: PORTAL SELECTION (Only shows Student and Admin) -->
+    <div id="roleSelectionView">
+        <p style="text-align: center; color: var(--text-secondary); font-size: 13.5px; margin-bottom: 20px;">
+            Please choose your role to access the designated learning portal:
+        </p>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 20px;">
+            <!-- Student Portal Card -->
+            <button type="button" class="portal-choice-card" onclick="selectPortal('student')" style="background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.35); border-radius: 12px; padding: 22px 14px; text-align: center; cursor: pointer; transition: all 0.2s;">
+                <div style="width: 44px; height: 44px; margin: 0 auto 12px; border-radius: 10px; background: rgba(99, 102, 241, 0.2); color: #818cf8; display: flex; align-items: center; justify-content: center;">
+                    <svg class="icon" style="width: 22px; height: 22px;" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                </div>
+                <div style="font-family: 'Outfit', sans-serif; font-size: 16px; font-weight: 700; color: #ffffff; margin-bottom: 4px;">Student</div>
+                <div style="font-size: 11.5px; color: var(--text-secondary);">Access Courses, Quizzes & Mentorship</div>
+            </button>
+
+            <!-- Admin Portal Card -->
+            <button type="button" class="portal-choice-card" onclick="selectPortal('admin')" style="background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.35); border-radius: 12px; padding: 22px 14px; text-align: center; cursor: pointer; transition: all 0.2s;">
+                <div style="width: 44px; height: 44px; margin: 0 auto 12px; border-radius: 10px; background: rgba(245, 158, 11, 0.2); color: #fbbf24; display: flex; align-items: center; justify-content: center;">
+                    <svg class="icon" style="width: 22px; height: 22px;" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                </div>
+                <div style="font-family: 'Outfit', sans-serif; font-size: 16px; font-weight: 700; color: #ffffff; margin-bottom: 4px;">Admin</div>
+                <div style="font-size: 11.5px; color: var(--text-secondary);">Manage Interventions, Analytics & Faculty</div>
+            </button>
+        </div>
+    </div>
+
+    <!-- STEP 2: CREDENTIAL ENTRY FORM (Revealed after role selection) -->
+    <div id="credentialFormView" style="display: none;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; padding-bottom: 12px; border-bottom: 1px solid var(--border-color);">
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span id="roleIndicatorBadge" class="badge badge-medium">Role</span>
+                <span id="roleTitleLabel" style="font-size: 13.5px; font-weight: 600; color: var(--text-primary);">Portal Sign-In</span>
+            </div>
+            <button type="button" onclick="backToRoleSelection()" style="background: none; border: none; color: var(--text-secondary); font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+                <svg class="icon" style="width: 13px; height: 13px;" viewBox="0 0 24 24"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+                <span>Change Role</span>
+            </button>
+        </div>
+
+        <form method="POST" action="{{ url_for('login') }}">
+            <div class="form-group">
+                <label class="form-label" for="username">Username or ID</label>
+                <input type="text" id="username" name="username" class="form-control" placeholder="Enter your credentials" required>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="password">Password</label>
+                <input type="password" id="password" name="password" class="form-control" placeholder="Enter security credentials" required>
+            </div>
+
+            <button type="submit" class="btn-submit">
+                <span>Access Portal</span>
+                <svg class="icon" viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+            </button>
+        </form>
+    </div>
+
+    <div class="auth-footer">
+        New learner? <a href="{{ url_for('register') }}">Create an account</a>
+    </div>
+</div>
+
+<script>
+    function selectPortal(role) {
+        document.getElementById('roleSelectionView').style.display = 'none';
+        document.getElementById('credentialFormView').style.display = 'block';
+
+        const badge = document.getElementById('roleIndicatorBadge');
+        const label = document.getElementById('roleTitleLabel');
+        const usernameInput = document.getElementById('username');
+        const passwordInput = document.getElementById('password');
+
+        if (role === 'student') {
+            badge.innerText = 'Student Portal';
+            badge.className = 'badge badge-low';
+            label.innerText = 'Student Authentication';
+            usernameInput.placeholder = 'e.g. swathi or dev';
+        } else {
+            badge.innerText = 'Admin Portal';
+            badge.className = 'badge badge-medium';
+            label.innerText = 'Admin & Instructor Authentication';
+            usernameInput.placeholder = 'e.g. admin';
+        }
+
+        usernameInput.focus();
+    }
+
+    function backToRoleSelection() {
+        document.getElementById('credentialFormView').style.display = 'none';
+        document.getElementById('roleSelectionView').style.display = 'block';
+        document.getElementById('username').value = '';
+        document.getElementById('password').value = '';
+    }
+</script>
+
+</body>
+</html>

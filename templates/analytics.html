@@ -1,0 +1,526 @@
+{% extends "base.html" %}
+
+{% block title %}AI Risk Center & Machine Learning Insights | EduGap AI{% endblock %}
+
+{% block header_title %}AI Risk Center & Diagnostic Intelligence{% endblock %}
+
+{% block content %}
+<style>
+    .risk-grid-container {
+        display: grid;
+        grid-template-columns: 1.25fr 1fr;
+        gap: 24px;
+        margin-bottom: 24px;
+    }
+    @media (max-width: 1024px) {
+        .risk-grid-container {
+            grid-template-columns: 1fr;
+        }
+    }
+    .slider-group {
+        margin-bottom: 16px;
+    }
+    .slider-header {
+        display: flex;
+        justify-content: space-between;
+        font-size: 13px;
+        margin-bottom: 6px;
+    }
+    .slider-control {
+        width: 100%;
+        accent-color: var(--primary);
+    }
+    .prediction-output-box {
+        background: linear-gradient(135deg, rgba(19, 29, 49, 0.95), rgba(15, 23, 42, 0.95));
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-lg);
+        padding: 24px;
+        text-align: center;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+    }
+    .action-card {
+        background: rgba(15, 23, 42, 0.4);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
+        padding: 16px;
+        display: flex;
+        gap: 14px;
+        align-items: flex-start;
+        transition: transform 0.2s, border-color 0.2s;
+    }
+    .action-card:hover {
+        transform: translateY(-2px);
+        border-color: rgba(99, 102, 241, 0.4);
+    }
+    .action-badge {
+        padding: 3px 8px;
+        border-radius: 4px;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+    }
+    .model-info-metric {
+        background: rgba(15, 23, 42, 0.5);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
+        padding: 14px;
+        text-align: center;
+    }
+    .model-info-metric .label {
+        font-size: 11.5px;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        margin-bottom: 4px;
+    }
+    .model-info-metric .val {
+        font-family: 'Outfit', sans-serif;
+        font-size: 20px;
+        font-weight: 700;
+        color: #ffffff;
+    }
+</style>
+
+<!-- Banner Header -->
+<div class="card" style="margin-bottom: 24px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+        <div>
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
+                <span class="badge badge-high" style="font-size: 11px;">RANDOM FOREST + SHAP AI</span>
+                <span style="color: var(--text-muted); font-size: 13px;">Supervised Early Warning Classification</span>
+            </div>
+            <h2 style="font-family: 'Outfit', sans-serif; font-size: 22px; color: #ffffff; margin-bottom: 4px;">
+                Predictive AI Risk Center & Diagnostic Insights
+            </h2>
+            <p style="color: var(--text-secondary); font-size: 13.5px; max-width: 800px;">
+                Explainable Machine Learning diagnostics detecting students at risk of severe academic gaps, providing what-if counterfactual scenario simulation, automated remediation prescriptions, and full historical risk auditing.
+            </p>
+        </div>
+        <div style="display: flex; gap: 10px;">
+            <span class="badge badge-neutral" style="padding: 6px 12px; font-size: 12.5px;">Engine: v2.4 Multi-Class Ensemble</span>
+        </div>
+    </div>
+</div>
+
+<!-- WHAT-IF SIMULATOR -->
+<div class="risk-grid-container">
+    <!-- Simulator Form -->
+    <div class="card">
+        <div class="card-header">
+            <h3>
+                <svg class="icon" viewBox="0 0 24 24" style="stroke: #fbbf24;"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                <span>Interactive What-If Scenario Simulator</span>
+            </h3>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="resetSimulator()">Reset</button>
+        </div>
+        
+        <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 18px;">
+            Simulate hypothetical learning trajectory shifts. Adjust parameters to test how interventions (e.g., boosting attendance or quiz scores) alter risk probabilities in real-time.
+        </p>
+
+        <!-- Preset Scenarios -->
+        <div style="display: flex; gap: 8px; margin-bottom: 18px; flex-wrap: wrap;">
+            <button type="button" class="btn btn-secondary btn-sm" style="font-size: 12px;" onclick="loadScenario('remedial_success')">Scenario: Remedial Success</button>
+            <button type="button" class="btn btn-secondary btn-sm" style="font-size: 12px;" onclick="loadScenario('attendance_drop')">Scenario: Attendance Slump</button>
+            <button type="button" class="btn btn-secondary btn-sm" style="font-size: 12px;" onclick="loadScenario('critical_disengage')">Scenario: Critical Disengagement</button>
+        </div>
+
+        <form id="simulatorForm">
+            <div class="slider-group">
+                <div class="slider-header">
+                    <span>Quiz Performance Score</span>
+                    <strong id="val_quiz">50%</strong>
+                </div>
+                <input type="range" class="slider-control" id="quiz_score" min="10" max="100" value="50">
+            </div>
+
+            <div class="slider-group">
+                <div class="slider-header">
+                    <span>Assignment Average</span>
+                    <strong id="val_assignment">55%</strong>
+                </div>
+                <input type="range" class="slider-control" id="assignment_score" min="10" max="100" value="55">
+            </div>
+
+            <div class="slider-group">
+                <div class="slider-header">
+                    <span>Cohort Attendance Rate</span>
+                    <strong id="val_attendance">75%</strong>
+                </div>
+                <input type="range" class="slider-control" id="attendance" min="30" max="100" value="75">
+            </div>
+
+            <div class="slider-group">
+                <div class="slider-header">
+                    <span>Days Inactive (Absence Duration)</span>
+                    <strong id="val_inactive">6 days</strong>
+                </div>
+                <input type="range" class="slider-control" id="days_inactive" min="0" max="30" value="6">
+            </div>
+
+            <div class="slider-group">
+                <div class="slider-header">
+                    <span>Learning Platform Engagement Index</span>
+                    <strong id="val_engagement">50%</strong>
+                </div>
+                <input type="range" class="slider-control" id="engagement_score" min="10" max="100" value="50">
+            </div>
+
+            <div class="slider-group">
+                <div class="slider-header">
+                    <span>Weekly Login Frequency</span>
+                    <strong id="val_login">3 sessions</strong>
+                </div>
+                <input type="range" class="slider-control" id="login_frequency" min="1" max="14" value="3">
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; margin-top: 10px;">
+                <button type="button" class="btn btn-primary btn-sm" onclick="saveSimulationSnapshot()">
+                    <svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+                    <span>Save Scenario Snapshot to Risk History</span>
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Live Prediction Output & Probabilities -->
+    <div class="card">
+        <div class="card-header">
+            <h3>
+                <svg class="icon" viewBox="0 0 24 24" style="stroke: #34d399;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                <span>Live ML Inference Engine</span>
+            </h3>
+            <span class="badge badge-neutral" id="modelStatusBadge">Active Model (Sync)</span>
+        </div>
+
+        <div class="prediction-output-box">
+            <div style="font-size: 12px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 6px; letter-spacing: 0.05em;">Predicted Risk Classification</div>
+            <div id="predictedLabel" style="font-family: 'Outfit', sans-serif; font-size: 30px; font-weight: 700; color: #fbbf24;">
+                Medium Risk
+            </div>
+            <div id="confidenceVal" style="font-size: 13.5px; color: var(--text-secondary); margin-top: 4px;">
+                Model Confidence: 72.0%
+            </div>
+        </div>
+
+        <div style="margin-bottom: 12px; font-size: 13px; font-weight: 600; color: var(--text-secondary);">
+            Class Probability Distribution
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 14px; margin-bottom: 24px;">
+            <div>
+                <div style="display: flex; justify-content: space-between; font-size: 12.5px; margin-bottom: 5px;">
+                    <span style="color: #f87171; font-weight: 600;">Critical High Risk</span>
+                    <span id="probHigh" style="font-weight: 700;">20.0%</span>
+                </div>
+                <div style="height: 8px; border-radius: 4px; background: rgba(255, 255, 255, 0.05); overflow: hidden;">
+                    <div id="barHigh" style="height: 100%; width: 20%; background: var(--danger); transition: width 0.3s ease;"></div>
+                </div>
+            </div>
+
+            <div>
+                <div style="display: flex; justify-content: space-between; font-size: 12.5px; margin-bottom: 5px;">
+                    <span style="color: #fbbf24; font-weight: 600;">Moderate Medium Risk</span>
+                    <span id="probMed" style="font-weight: 700;">65.0%</span>
+                </div>
+                <div style="height: 8px; border-radius: 4px; background: rgba(255, 255, 255, 0.05); overflow: hidden;">
+                    <div id="barMed" style="height: 100%; width: 65%; background: var(--warning); transition: width 0.3s ease;"></div>
+                </div>
+            </div>
+
+            <div>
+                <div style="display: flex; justify-content: space-between; font-size: 12.5px; margin-bottom: 5px;">
+                    <span style="color: #34d399; font-weight: 600;">Proficient / Low Risk</span>
+                    <span id="probLow" style="font-weight: 700;">15.0%</span>
+                </div>
+                <div style="height: 8px; border-radius: 4px; background: rgba(255, 255, 255, 0.05); overflow: hidden;">
+                    <div id="barLow" style="height: 100%; width: 15%; background: var(--success); transition: width 0.3s ease;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Dynamic Counterfactual Suggestion -->
+        <div id="counterfactualBox" style="background: rgba(99, 102, 241, 0.08); border-left: 3px solid var(--primary); padding: 12px; border-radius: 4px;">
+            <div style="font-size: 11.5px; font-weight: 700; color: #818cf8; text-transform: uppercase; margin-bottom: 2px;">What-If Prescription:</div>
+            <div id="counterfactualText" style="font-size: 12.5px; color: #e2e8f0; line-height: 1.4;">
+                Improving quiz score to &ge;70% and reducing inactive days below 4 will safely transition this student into Low Risk.
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- RECOMMENDED ACTIONS SECTION -->
+<div class="card" style="margin-bottom: 24px;">
+    <div class="card-header">
+        <h3>
+            <svg class="icon" viewBox="0 0 24 24" style="stroke: #c084fc;"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+            <span>Recommended Actions & Institutional Decision Protocols</span>
+        </h3>
+        <span class="badge badge-neutral">Actionable Playbook</span>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px;">
+        <div class="action-card">
+            <div style="background: rgba(239, 68, 68, 0.15); color: #f87171; width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                <svg class="icon" viewBox="0 0 24 24"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            </div>
+            <div>
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                    <span class="action-badge" style="background: rgba(239, 68, 68, 0.2); color: #f87171;">Critical Priority</span>
+                    <strong style="font-size: 13.5px; color: #ffffff;">Immediate Faculty Mentorship Assignment</strong>
+                </div>
+                <p style="font-size: 12.5px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 8px;">
+                    Trigger mandatory 1-on-1 tutoring sessions with assigned department advisors for students with High Risk classification and quiz averages below 50%.
+                </p>
+                <a href="{{ url_for('interventions_page') }}" class="btn btn-secondary btn-sm" style="font-size: 11.5px; padding: 4px 10px;">Dispatch Intervention &rarr;</a>
+            </div>
+        </div>
+
+        <div class="action-card">
+            <div style="background: rgba(245, 158, 11, 0.15); color: #fbbf24; width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            </div>
+            <div>
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                    <span class="action-badge" style="background: rgba(245, 158, 11, 0.2); color: #fbbf24;">Moderate Priority</span>
+                    <strong style="font-size: 13.5px; color: #ffffff;">Targeted Remedial Micro-Quizzes</strong>
+                </div>
+                <p style="font-size: 12.5px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 8px;">
+                    Deploy automated 5-question adaptive quizzes targeting specifically identified gap topics (e.g. SQL joins, recursion) to reinforce mastery before midterms.
+                </p>
+                <a href="{{ url_for('quizzes_page') }}" class="btn btn-secondary btn-sm" style="font-size: 11.5px; padding: 4px 10px;">Review Quizzes &rarr;</a>
+            </div>
+        </div>
+
+        <div class="action-card">
+            <div style="background: rgba(16, 185, 129, 0.15); color: #34d399; width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            </div>
+            <div>
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                    <span class="action-badge" style="background: rgba(16, 185, 129, 0.2); color: #34d399;">Preventive Priority</span>
+                    <strong style="font-size: 13.5px; color: #ffffff;">Engagement Nudge & Study Calendar</strong>
+                </div>
+                <p style="font-size: 12.5px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 8px;">
+                    Send automated study schedule reminders to learners approaching 5+ days of platform inactivity, reducing risk escalation by up to 45%.
+                </p>
+                <a href="{{ url_for('topics_page') }}" class="btn btn-secondary btn-sm" style="font-size: 11.5px; padding: 4px 10px;">Check Knowledge Map &rarr;</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- RISK HISTORY LOG TABLE -->
+<div class="card" style="margin-bottom: 24px;">
+    <div class="card-header">
+        <div>
+            <h3>
+                <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 14 10"/></svg>
+                <span>Longitudinal Risk Audit Trail & Assessment History</span>
+            </h3>
+            <p style="color: var(--text-secondary); font-size: 13px; margin-top: 4px;">
+                Historical timeline of student risk evaluations, recorded model confidence scores, and identified top drivers.
+            </p>
+        </div>
+        <span class="badge badge-neutral">{{ history_records|length }} Total Audit Records</span>
+    </div>
+
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Timestamp</th>
+                    <th>Student ID</th>
+                    <th>Student Name</th>
+                    <th>Classified Risk</th>
+                    <th>Confidence</th>
+                    <th>Quiz Avg</th>
+                    <th>Assignment</th>
+                    <th>Inactive</th>
+                    <th>Primary Top Driver</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if history_records %}
+                    {% for h in history_records %}
+                    <tr>
+                        <td style="font-size: 12px; color: var(--text-muted); white-space: nowrap;">
+                            {{ h['recorded_at'] }}
+                        </td>
+                        <td>
+                            <strong style="color: #ffffff;">{{ h['student_id'] }}</strong>
+                        </td>
+                        <td>{{ h['student_name'] or 'Student' }}</td>
+                        <td>
+                            <span class="badge {% if h['risk_level'] == 'High Risk' %}badge-high{% elif h['risk_level'] == 'Medium Risk' %}badge-medium{% else %}badge-low{% endif %}">
+                                {{ h['risk_level'] }}
+                            </span>
+                        </td>
+                        <td>{{ h['confidence']|round(1) }}%</td>
+                        <td>{{ h['quiz_score']|round(1) }}%</td>
+                        <td>{{ h['assignment_score']|round(1) }}%</td>
+                        <td>{{ h['days_inactive'] }} days</td>
+                        <td style="font-size: 12.5px; color: var(--text-secondary);">
+                            {{ h['top_driver'] }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="9" style="text-align: center; padding: 24px; color: var(--text-muted);">
+                            No risk history snapshots logged yet. Use the simulator above to save custom scenarios.
+                        </td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const sliders = ['quiz_score', 'assignment_score', 'attendance', 'days_inactive', 'engagement_score', 'login_frequency'];
+    
+    function updateValues() {
+        document.getElementById('val_quiz').innerText = document.getElementById('quiz_score').value + '%';
+        document.getElementById('val_assignment').innerText = document.getElementById('assignment_score').value + '%';
+        document.getElementById('val_attendance').innerText = document.getElementById('attendance').value + '%';
+        document.getElementById('val_inactive').innerText = document.getElementById('days_inactive').value + ' days';
+        document.getElementById('val_engagement').innerText = document.getElementById('engagement_score').value + '%';
+        document.getElementById('val_login').innerText = document.getElementById('login_frequency').value + ' sessions';
+
+        const qVal = parseFloat(document.getElementById('quiz_score').value);
+        const payload = {
+            quiz_score: qVal,
+            assignment_score: parseFloat(document.getElementById('assignment_score').value),
+            attendance: parseFloat(document.getElementById('attendance').value),
+            videos_watched: Math.max(1, Math.round(qVal / 15)),
+            lessons_completed: Math.max(1, Math.round(qVal / 12)),
+            login_frequency: parseInt(document.getElementById('login_frequency').value),
+            days_inactive: parseInt(document.getElementById('days_inactive').value),
+            previous_topic_score: qVal,
+            engagement_score: parseFloat(document.getElementById('engagement_score').value)
+        };
+
+        fetch("{{ url_for('api_predict_risk') }}", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        })
+        .then(res => res.json())
+        .then(data => {
+            const pred = data.prediction;
+            const probs = data.probabilities;
+            
+            const labelEl = document.getElementById('predictedLabel');
+            labelEl.innerText = pred;
+            if (pred === 'High Risk') {
+                labelEl.style.color = '#f87171';
+            } else if (pred === 'Medium Risk') {
+                labelEl.style.color = '#fbbf24';
+            } else {
+                labelEl.style.color = '#34d399';
+            }
+
+            document.getElementById('confidenceVal').innerText = 'Model Confidence: ' + data.confidence + '%';
+            
+            const pHigh = probs['High Risk'] || 0;
+            const pMed = probs['Medium Risk'] || 0;
+            const pLow = probs['Low Risk'] || 0;
+
+            document.getElementById('probHigh').innerText = pHigh + '%';
+            document.getElementById('barHigh').style.width = pHigh + '%';
+
+            document.getElementById('probMed').innerText = pMed + '%';
+            document.getElementById('barMed').style.width = pMed + '%';
+
+            document.getElementById('probLow').innerText = pLow + '%';
+            document.getElementById('barLow').style.width = pLow + '%';
+
+            // Dynamic Counterfactual guidance
+            const cfEl = document.getElementById('counterfactualText');
+            if (pred === 'High Risk') {
+                cfEl.innerText = "Student is in critical gap zone. Recommended: Raise formative quiz score above 55% and lower inactive duration under 5 days to de-escalate risk category.";
+            } else if (pred === 'Medium Risk') {
+                cfEl.innerText = "Student is trending borderline. Improving quiz scores to >=70% and attendance above 80% safely shifts student into Low Risk category.";
+            } else {
+                cfEl.innerText = "Excellent indicators. Student demonstrates consistent topic mastery with low probability of learning gap accumulation.";
+            }
+        })
+        .catch(err => console.error(err));
+    }
+
+    sliders.forEach(id => {
+        document.getElementById(id).addEventListener('input', updateValues);
+    });
+
+    function loadScenario(type) {
+        if (type === 'remedial_success') {
+            document.getElementById('quiz_score').value = 78;
+            document.getElementById('assignment_score').value = 82;
+            document.getElementById('attendance').value = 90;
+            document.getElementById('days_inactive').value = 1;
+            document.getElementById('engagement_score').value = 85;
+            document.getElementById('login_frequency').value = 5;
+        } else if (type === 'attendance_drop') {
+            document.getElementById('quiz_score').value = 60;
+            document.getElementById('assignment_score').value = 55;
+            document.getElementById('attendance').value = 52;
+            document.getElementById('days_inactive').value = 8;
+            document.getElementById('engagement_score').value = 45;
+            document.getElementById('login_frequency').value = 2;
+        } else if (type === 'critical_disengage') {
+            document.getElementById('quiz_score').value = 32;
+            document.getElementById('assignment_score').value = 38;
+            document.getElementById('attendance').value = 40;
+            document.getElementById('days_inactive').value = 14;
+            document.getElementById('engagement_score').value = 20;
+            document.getElementById('login_frequency').value = 1;
+        }
+        updateValues();
+    }
+
+    function resetSimulator() {
+        document.getElementById('quiz_score').value = 50;
+        document.getElementById('assignment_score').value = 55;
+        document.getElementById('attendance').value = 75;
+        document.getElementById('days_inactive').value = 6;
+        document.getElementById('engagement_score').value = 50;
+        document.getElementById('login_frequency').value = 3;
+        updateValues();
+    }
+
+    function saveSimulationSnapshot() {
+        const payload = {
+            student_id: "{{ session.get('student_id') or 'S001' }}",
+            prediction: document.getElementById('predictedLabel').innerText,
+            confidence: parseFloat(document.getElementById('confidenceVal').innerText.replace(/[^\d.]/g, '')),
+            quiz_score: parseFloat(document.getElementById('quiz_score').value),
+            assignment_score: parseFloat(document.getElementById('assignment_score').value),
+            attendance: parseFloat(document.getElementById('attendance').value),
+            days_inactive: parseInt(document.getElementById('days_inactive').value),
+            engagement_score: parseFloat(document.getElementById('engagement_score').value),
+            top_driver: "Interactive Simulator Snapshot"
+        };
+
+        fetch("{{ url_for('api_record_simulation') }}", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        })
+        .then(res => res.json())
+        .then(data => {
+            alert("Snapshot recorded successfully into Risk Audit History!");
+            window.location.reload();
+        })
+        .catch(err => {
+            alert("Failed to save simulation snapshot.");
+        });
+    }
+
+    // Initial run
+    updateValues();
+</script>
+{% endblock %}
+
