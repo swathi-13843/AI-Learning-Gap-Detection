@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+
+{% block title %}YouTube Learning Resources | EduGap AI{% endblock %}
+
+{% block header_title %}
+    {% if session.get('role') == 'admin' %}
+        YouTube Video Resource Management & Assignments
+    {% else %}
+        Recommended YouTube Learning Resources
+    {% endif %}
+{% endblock %}
+
+{% block content %}
+<style>
+    .resource-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+        gap: 20px;
+        margin-bottom: 28px;
+    }
+    .video-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        transition: var(--transition);
+    }
+    .video-card:hover {
+        border-color: var(--primary);
+        transform: translateY(-2px);
+    }
+    .video-thumb {
+        width: 100%;
+        height: 170px;
+        object-fit: cover;
+        background: #000;
+    }
+    .video-content {
+        padding: 18px;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+    }
+</style>
+
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 12px;">
+    <div>
+        <h3 style="font-family: 'Outfit', sans-serif; font-size: 20px; color: #ffffff;">
+            {% if session.get('role') == 'admin' %}Topic-Wise YouTube Video Library{% else %}Your Recommended Educational Video Lectures{% endif %}
+        </h3>
+        <p style="color: var(--text-secondary); font-size: 13px;">
+            {% if session.get('role') == 'admin' %}Add, organize, and assign verified YouTube educational lectures to target student learning gaps.{% else %}Lectures curated specifically to remediate identified conceptual ambiguities.{% endif %}
+        </p>
+    </div>
+    {% if session.get('role') == 'admin' %}
+    <button type="button" class="btn btn-primary" onclick="openAddVideoModal()">
+        <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        <span>Add YouTube Video</span>
+    </button>
+    {% endif %}
+</div>
+
+<!-- Video Cards Grid -->
+<div class="resource-grid">
+    {% for vid in resources %}
+    <div class="video-card">
+        <div>
+            <img src="{{ vid['thumbnail_url'] if vid['thumbnail_url'] else 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=500&q=80' }}" class="video-thumb" alt="Thumbnail">
+            <div class="video-content">
+                <div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <span class="badge badge-neutral" style="font-size: 11px;">{{ vid['topic'] }}</span>
+                        <span class="badge {% if vid['difficulty_level'] == 'Beginner' %}badge-low{% elif vid['difficulty_level'] == 'Intermediate' %}badge-medium{% else %}badge-high{% endif %}" style="font-size: 11px;">
+                            {{ vid['difficulty_level'] }}
+                        </span>
+                    </div>
+
+                    <h4 style="font-size: 15px; font-weight: 600; color: #ffffff; margin-bottom: 8px; line-height: 1.4;">
+                        {{ vid['title'] }}
+                    </h4>
+                    <p style="font-size: 12.5px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 12px;">
+                        {{ vid['description'] }}
+                    </p>
+
+                    {% if vid['learning_objective'] %}
+                    <div style="font-size: 11.5px; color: #38bdf8; background: rgba(14, 165, 233, 0.08); padding: 8px; border-radius: 6px; margin-bottom: 12px;">
+                        <strong>Objective:</strong> {{ vid['learning_objective'] }}
+                    </div>
+                    {% endif %}
+                </div>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px; pt: 12px; border-top: 1px solid var(--border-color); padding-top: 12px;">
+                    <span style="font-size: 12px; color: var(--text-muted);">{{ vid['subject'] }}</span>
+                    <div style="display: flex; gap: 8px;">
+                        <a href="{{ vid['youtube_url'] }}" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-sm" style="text-decoration: none;">
+                            <span>Watch on YouTube</span>
+                            <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/></svg>
+                        </a>
+                        {% if session.get('role') == 'admin' %}
+                        <form method="POST" action="{{ url_for('delete_youtube_resource', resource_id=vid['id']) }}" onsubmit="return confirm('Remove this YouTube resource?');">
+                            <button type="submit" class="btn btn-secondary btn-sm" style="color: #f87171;" title="Remove video">
+                                <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                            </button>
+                        </form>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div style="grid-column: 1 / -1; padding: 48px; text-align: center; color: var(--text-secondary); background: var(--bg-card); border-radius: var(--radius-lg); border: 1px solid var(--border-color);">
+        <h3>No YouTube resources available</h3>
+        <p style="margin-top: 8px;">Videos added by the Admin will appear here.</p>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Modal for Adding YouTube Resource -->
+{% if session.get('role') == 'admin' %}
+<div id="addVideoModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 100; align-items: center; justify-content: center; padding: 20px;">
+    <div class="card" style="max-width: 520px; width: 100%; box-shadow: 0 20px 40px rgba(0,0,0,0.6);">
+        <div class="card-header">
+            <h3>Add YouTube Educational Video</h3>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="closeAddVideoModal()">Close</button>
+        </div>
+        <form method="POST" action="{{ url_for('add_youtube_resource') }}">
+            <div class="form-group">
+                <label class="form-label">Video Title</label>
+                <input type="text" name="title" class="form-control" required placeholder="e.g. Complete Python Object Oriented Programming Tutorial">
+            </div>
+            <div class="form-group">
+                <label class="form-label">YouTube Video URL</label>
+                <input type="url" name="youtube_url" class="form-control" required placeholder="https://www.youtube.com/watch?v=...">
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                <div class="form-group">
+                    <label class="form-label">Subject</label>
+                    <input type="text" name="subject" class="form-control" required placeholder="e.g. Programming">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Topic Tag</label>
+                    <select name="topic" class="form-control">
+                        {% for t in topics %}
+                        <option value="{{ t['topic_name'] }}">{{ t['topic_name'] }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                <div class="form-group">
+                    <label class="form-label">Difficulty Level</label>
+                    <select name="difficulty_level" class="form-control">
+                        <option value="Beginner">Beginner</option>
+                        <option value="Intermediate" selected>Intermediate</option>
+                        <option value="Advanced">Advanced</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Assign to Specific Student (Optional)</label>
+                    <input type="text" name="assigned_to_student_id" class="form-control" placeholder="All students or e.g. S001">
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Short Description</label>
+                <textarea name="description" rows="2" class="form-control" placeholder="Summary of what is covered in this video..."></textarea>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Learning Objective</label>
+                <input type="text" name="learning_objective" class="form-control" placeholder="Key takeaway or concept to master...">
+            </div>
+            <button type="submit" class="btn btn-primary" style="width: 100%;">Add & Publish Resource</button>
+        </form>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function openAddVideoModal() {
+        document.getElementById('addVideoModal').style.display = 'flex';
+    }
+    function closeAddVideoModal() {
+        document.getElementById('addVideoModal').style.display = 'none';
+    }
+</script>
+{% endblock %}

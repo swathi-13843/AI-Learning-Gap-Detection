@@ -124,13 +124,160 @@
 <div class="card" style="margin-bottom: 24px;">
     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
         <div>
+            {% if is_admin %}
+            <h2 style="font-family: 'Outfit', sans-serif; font-size: 20px; color: #ffffff; margin-bottom: 4px;">Student Project Submissions & Evaluation Console</h2>
+            <p style="color: var(--text-secondary); font-size: 13.5px;">Review submitted student codebase implementations, inspect repositories, assign scores, and provide structured qualitative feedback.</p>
+            {% else %}
             <h2 style="font-family: 'Outfit', sans-serif; font-size: 20px; color: #ffffff; margin-bottom: 4px;">Hands-on Curriculum Tasks & Assessments</h2>
             <p style="color: var(--text-secondary); font-size: 13.5px;">Practical implementations evaluating code architecture, algorithmic proficiency, and machine learning models.</p>
+            {% endif %}
         </div>
-        <span class="badge badge-neutral">Tasks Enrolled: {{ assignments|length }}</span>
+        <span class="badge badge-neutral">{% if is_admin %}Total Submissions: {{ submissions|length }}{% else %}Tasks Enrolled: {{ assignments|length }}{% endif %}</span>
     </div>
 </div>
 
+{% if is_admin %}
+<!-- Admin Evaluation & Grading Table -->
+<div class="card">
+    <div style="overflow-x: auto;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+            <thead>
+                <tr style="border-bottom: 1px solid var(--border-color); text-align: left; color: var(--text-muted); font-size: 11px; text-transform: uppercase;">
+                    <th style="padding: 12px 14px;">Submission ID</th>
+                    <th style="padding: 12px 14px;">Student</th>
+                    <th style="padding: 12px 14px;">Assignment Title</th>
+                    <th style="padding: 12px 14px;">Deliverables</th>
+                    <th style="padding: 12px 14px;">Status</th>
+                    <th style="padding: 12px 14px;">Awarded Score</th>
+                    <th style="padding: 12px 14px; text-align: right;">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sub in submissions %}
+                <tr style="border-bottom: 1px solid var(--border-color);">
+                    <td style="padding: 14px; font-weight: 600; color: #ffffff;">#{{ sub['id'] }}</td>
+                    <td style="padding: 14px;">
+                        <div style="font-weight: 600; color: #ffffff;">{{ sub['student_name'] or sub['student_id'] }}</div>
+                        <div style="font-size: 11px; color: var(--text-muted);">{{ sub['student_id'] }} &bull; {{ sub['department'] or 'Computer Science' }}</div>
+                    </td>
+                    <td style="padding: 14px; font-weight: 500; color: var(--text-primary);">
+                        {{ sub['assignment_title'] }}
+                    </td>
+                    <td style="padding: 14px;">
+                        {% if sub['github_repo'] %}
+                        <div>
+                            <a href="{{ sub['github_repo'] }}" target="_blank" rel="noopener noreferrer" style="color: var(--primary); text-decoration: underline; font-family: monospace; font-size: 11.5px;">
+                                GitHub Repository
+                            </a>
+                        </div>
+                        {% endif %}
+                        {% if sub['file_name'] %}
+                        <div style="font-size: 11.5px; color: var(--text-secondary);">
+                            File: <strong>{{ sub['file_name'] }}</strong>
+                        </div>
+                        {% endif %}
+                        {% if sub['comments'] %}
+                        <div style="font-size: 11px; color: var(--text-muted); font-style: italic; max-width: 260px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{{ sub['comments'] }}">
+                            "{{ sub['comments'] }}"
+                        </div>
+                        {% endif %}
+                        {% if not sub['github_repo'] and not sub['file_name'] and not sub['comments'] %}
+                        <span style="color: var(--text-muted); font-size: 11.5px;">Standard Deliverable</span>
+                        {% endif %}
+                    </td>
+                    <td style="padding: 14px;">
+                        {% if sub['status'] == 'Graded' %}
+                        <span class="badge badge-low">Graded</span>
+                        {% else %}
+                        <span class="badge badge-medium">Pending Review</span>
+                        {% endif %}
+                    </td>
+                    <td style="padding: 14px;">
+                        {% if sub['status'] == 'Graded' %}
+                        <span style="font-size: 15px; font-weight: 700; color: #34d399;">{{ sub['score']|int }}</span>
+                        {% else %}
+                        <span style="font-size: 15px; font-weight: 700; color: #fbbf24;">{{ sub['score']|int }}</span>
+                        {% endif %}
+                        <span style="color: var(--text-muted); font-size: 12px;"> / {{ sub['max_score']|int }} Pts</span>
+                    </td>
+                    <td style="padding: 14px; text-align: right;">
+                        <button type="button" class="btn btn-primary btn-sm btn-grade"
+                                data-sub-id="{{ sub['id'] }}"
+                                data-student="{{ sub['student_name'] or sub['student_id'] }}"
+                                data-title="{{ sub['assignment_title'] }}"
+                                data-score="{{ sub['score'] }}"
+                                data-max-score="{{ sub['max_score'] }}"
+                                data-feedback="{{ sub['feedback'] if sub['feedback'] else '' }}">
+                            <span>Evaluate & Grade</span>
+                        </button>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="7" style="padding: 32px; text-align: center; color: var(--text-secondary);">
+                        No student project submissions waiting for evaluation.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal for Grading Submissions -->
+<div class="modal-overlay" id="gradeModal" onclick="if(event.target === this) this.classList.remove('active')">
+    <div class="modal-card" style="max-width: 540px;">
+        <button type="button" class="modal-close-btn" onclick="document.getElementById('gradeModal').classList.remove('active')">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+        <h3 style="font-family: 'Outfit', sans-serif; font-size: 18px; color: #ffffff; margin-bottom: 6px;">Evaluate Student Project</h3>
+        <p style="font-size: 12.5px; color: var(--text-secondary); margin-bottom: 18px;" id="gradeModalSubtitle">Assign marks and feedback</p>
+        
+        <form method="POST" id="gradeForm" action="">
+            <div style="margin-bottom: 16px;">
+                <label style="font-size: 12.5px; font-weight: 500; color: var(--text-secondary); display: block; margin-bottom: 6px;" id="gradeScoreLabel">Score Awarded</label>
+                <input type="number" step="0.5" min="0" id="gradeScoreInput" name="score" class="form-control" required style="font-size: 16px; font-weight: 600;">
+            </div>
+
+            <div style="margin-bottom: 20px;">
+                <label style="font-size: 12.5px; font-weight: 500; color: var(--text-secondary); display: block; margin-bottom: 6px;">Qualitative Feedback & Guidance</label>
+                <textarea id="gradeFeedbackInput" name="feedback" class="form-control" rows="3" placeholder="Provide constructive remarks on code quality, testing, architectural design..."></textarea>
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('gradeModal').classList.remove('active')">Cancel</button>
+                <button type="submit" class="btn btn-primary btn-sm">Submit Evaluation</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.btn-grade').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            const subId = this.dataset.subId;
+            const studentName = this.dataset.student;
+            const title = this.dataset.title;
+            const score = this.dataset.score;
+            const maxScore = this.dataset.maxScore;
+            const feedback = this.dataset.feedback;
+
+            document.getElementById('gradeForm').action = '/admin/grade-submission/' + subId;
+            document.getElementById('gradeModalSubtitle').innerText = studentName + ' - ' + title;
+            document.getElementById('gradeScoreLabel').innerText = 'Score Awarded (Max: ' + maxScore + ' Pts)';
+            const scInput = document.getElementById('gradeScoreInput');
+            scInput.max = maxScore;
+            scInput.value = score;
+            document.getElementById('gradeFeedbackInput').value = feedback;
+            document.getElementById('gradeModal').classList.add('active');
+        });
+    });
+});
+</script>
+
+{% else %}
+<!-- Student View: Enrolled Assignments List -->
 <div class="assignment-list">
     {% for a in assignments %}
     {% set sub = submission_map.get(a['id']) %}
@@ -141,7 +288,11 @@
                     <span class="badge badge-neutral" style="font-size: 11px;">{{ a['subject'] }} &bull; {{ a['topic_name'] }}</span>
                     <span style="font-size: 12px; color: var(--text-muted);">Due: {{ a['due_date'] }}</span>
                     {% if sub %}
-                        <span class="badge badge-low" style="font-size: 11px;">Submitted</span>
+                        {% if sub['status'] == 'Graded' %}
+                            <span class="badge badge-low" style="font-size: 11px;">Graded: {{ sub['score']|int }}/{{ a['max_score']|int }} Pts</span>
+                        {% else %}
+                            <span class="badge badge-medium" style="font-size: 11px;">Submitted (Pending Evaluation)</span>
+                        {% endif %}
                     {% else %}
                         <span class="badge badge-medium" style="font-size: 11px;">Pending Submission</span>
                     {% endif %}
@@ -164,6 +315,11 @@
                     <strong style="color: #34d399;">Submission Confirmed</strong>
                     <span style="color: var(--text-muted); font-size: 11.5px;">(Score: {{ sub['score']|int }}/{{ a['max_score']|int }})</span>
                 </div>
+                {% if sub['feedback'] %}
+                <div style="color: #38bdf8; font-size: 12.5px; margin-top: 2px;">
+                    Evaluator Feedback: "{{ sub['feedback'] }}"
+                </div>
+                {% endif %}
                 {% if sub['file_name'] %}
                 <div style="color: var(--text-secondary); font-size: 12px;">
                     Uploaded File: <strong style="color: #ffffff;">{{ sub['file_name'] }}</strong>
@@ -171,18 +327,13 @@
                 {% endif %}
                 {% if sub['github_repo'] %}
                 <div>
-                    GitHub Repository: <a href="{{ sub['github_repo'] }}" target="_blank" rel="noopener" class="repo-link">{{ sub['github_repo'] }}</a>
-                </div>
-                {% endif %}
-                {% if sub['comments'] %}
-                <div style="color: var(--text-muted); font-size: 12px; font-style: italic;">
-                    Notes: "{{ sub['comments'] }}"
+                    GitHub Repository: <a href="{{ sub['github_repo'] }}" target="_blank" rel="noopener noreferrer" class="repo-link">{{ sub['github_repo'] }}</a>
                 </div>
                 {% endif %}
             </div>
             <div>
-                <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('form-{{ a['id'] }}').style.display = (document.getElementById('form-{{ a['id'] }}').style.display === 'none' ? 'block' : 'none');">
-                    <span>Resubmit Project</span>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="toggleForm('form-{{ a['id'] }}')">
+                    <span>Resubmit Deliverable</span>
                 </button>
             </div>
         </div>
@@ -223,4 +374,16 @@
     </div>
     {% endfor %}
 </div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleForm(formId) {
+    const el = document.getElementById(formId);
+    if (el) {
+        el.style.display = (el.style.display === 'none' || el.style.display === '') ? 'block' : 'none';
+    }
+}
+</script>
 {% endblock %}

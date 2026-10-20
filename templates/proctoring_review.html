@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+
+{% block title %}Proctoring Security & Integrity Review | EduGap AI{% endblock %}
+
+{% block header_title %}Examination Proctoring Security & Integrity Center{% endblock %}
+
+{% block content %}
+<style>
+    .severity-badge-critical {
+        background: rgba(239, 68, 68, 0.2);
+        color: #f87171;
+        border: 1px solid #ef4444;
+    }
+    .severity-badge-warning {
+        background: rgba(245, 158, 11, 0.2);
+        color: #fbbf24;
+        border: 1px solid #f59e0b;
+    }
+    .severity-badge-info {
+        background: rgba(14, 165, 233, 0.2);
+        color: #38bdf8;
+        border: 1px solid #0ea5e9;
+    }
+    .proctor-stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 16px;
+        margin-bottom: 24px;
+    }
+</style>
+
+<!-- Top Statistics Cards -->
+<div class="proctor-stats-grid">
+    <div class="card" style="padding: 18px; border-left: 4px solid var(--primary);">
+        <div style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">Total Monitored Attempts</div>
+        <div style="font-size: 24px; font-weight: 700; color: #ffffff; margin-top: 4px;">{{ total_attempts }}</div>
+    </div>
+    <div class="card" style="padding: 18px; border-left: 4px solid var(--danger);">
+        <div style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">Flagged Attempts</div>
+        <div style="font-size: 24px; font-weight: 700; color: #f87171; margin-top: 4px;">{{ flagged_attempts }}</div>
+    </div>
+    <div class="card" style="padding: 18px; border-left: 4px solid var(--warning);">
+        <div style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">Security Events Logged</div>
+        <div style="font-size: 24px; font-weight: 700; color: #fbbf24; margin-top: 4px;">{{ proctoring_logs|length }}</div>
+    </div>
+    <div class="card" style="padding: 18px; border-left: 4px solid var(--success);">
+        <div style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">Normal / Clean Attempts</div>
+        <div style="font-size: 24px; font-weight: 700; color: #34d399; margin-top: 4px;">{{ clean_attempts }}</div>
+    </div>
+</div>
+
+<!-- Attempts Overview Card with Review Actions -->
+<div class="card" style="margin-bottom: 28px;">
+    <div class="card-header">
+        <h3>
+            <svg class="icon" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            <span>Candidate Examination Proctoring Sessions</span>
+        </h3>
+    </div>
+
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Attempt ID</th>
+                    <th>Student ID</th>
+                    <th>Assessment</th>
+                    <th>Flags</th>
+                    <th>Review Decision</th>
+                    <th>Review Notes</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for att in attempts %}
+                <tr>
+                    <td style="font-family: monospace; font-weight: 600;">#{{ att['id'] }}</td>
+                    <td style="font-weight: 600; color: var(--primary);">{{ att['student_id'] }}</td>
+                    <td style="font-size: 13px;">{{ att['assessment_title'] }}</td>
+                    <td>
+                        {% if att['proctoring_flag_count'] > 0 %}
+                            <span class="badge badge-high">{{ att['proctoring_flag_count'] }} Flags</span>
+                        {% else %}
+                            <span class="badge badge-low">Clean Session</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {% if att['review_status'] == 'reviewed' %}badge-low{% elif att['review_status'] == 'flagged' %}badge-high{% elif att['review_status'] == 'under_review' %}badge-medium{% else %}badge-neutral{% endif %}">
+                            {{ att['review_status']|upper }}
+                        </span>
+                    </td>
+                    <td style="font-size: 12px; color: var(--text-secondary); max-width: 250px;">
+                        {{ att['review_notes'] if att['review_notes'] else 'No reviewer notes recorded.' }}
+                    </td>
+                    <td>
+                        <a href="{{ url_for('evaluate_attempt_view', attempt_id=att['id']) }}" class="btn btn-secondary btn-sm">
+                            <span>Evaluate / Adjudicate</span>
+                        </a>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="7" style="text-align: center; color: var(--text-secondary); padding: 24px;">
+                        No examination attempts recorded yet.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Detailed Proctoring Security Events Logs -->
+<div class="card">
+    <div class="card-header">
+        <h3>
+            <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <span>Real-Time Security & Environmental Event Timeline</span>
+        </h3>
+        <span class="badge badge-neutral">{{ proctoring_logs|length }} Events Captured</span>
+    </div>
+
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Timestamp</th>
+                    <th>Student ID</th>
+                    <th>Attempt ID</th>
+                    <th>Event Category</th>
+                    <th>Severity</th>
+                    <th>Event Diagnostics</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in proctoring_logs %}
+                <tr>
+                    <td style="font-size: 12px; color: var(--text-secondary); font-family: monospace;">{{ log['timestamp'] }}</td>
+                    <td style="font-weight: 600; color: var(--primary);">{{ log['student_id'] }}</td>
+                    <td style="font-family: monospace;">#{{ log['attempt_id'] }}</td>
+                    <td>
+                        {% if log['event_type'] == 'tab_switch' %}
+                            <span class="badge badge-medium">Tab Switch Detected</span>
+                        {% elif log['event_type'] == 'window_blur' %}
+                            <span class="badge badge-medium">Window Lost Focus</span>
+                        {% elif log['event_type'] == 'face_missing' %}
+                            <span class="badge badge-high">Face Not Detected</span>
+                        {% elif log['event_type'] == 'multiple_faces' %}
+                            <span class="badge badge-high">Multiple Faces Detected</span>
+                        {% elif log['event_type'] == 'fullscreen_exit' %}
+                            <span class="badge badge-medium">Fullscreen Exited</span>
+                        {% elif log['event_type'] == 'copy_paste' %}
+                            <span class="badge badge-high">Copy/Paste Attempt</span>
+                        {% else %}
+                            <span class="badge badge-neutral">{{ log['event_type'] }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge severity-badge-{{ log['severity'] }}">{{ log['severity']|upper }}</span>
+                    </td>
+                    <td style="font-size: 12.5px; color: var(--text-primary);">
+                        {{ log['details'] }}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="6" style="text-align: center; color: var(--text-secondary); padding: 24px;">
+                        No security flags or integrity events recorded across active sessions.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

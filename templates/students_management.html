@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+
+{% block title %}Manage Students Directory | EduGap AI{% endblock %}
+
+{% block header_title %}Student Management & Academic Registry{% endblock %}
+
+{% block content %}
+<style>
+    .filter-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-lg);
+        padding: 20px;
+        margin-bottom: 24px;
+        display: flex;
+        gap: 16px;
+        align-items: center;
+        flex-wrap: wrap;
+    }
+    .action-btn-group {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+    }
+    .action-badge {
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 11.5px;
+        font-weight: 500;
+        text-decoration: none;
+        border: 1px solid var(--border-color);
+        background: rgba(255, 255, 255, 0.04);
+        color: var(--text-primary);
+        transition: var(--transition);
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+    }
+    .action-badge:hover {
+        background: var(--primary-light);
+        border-color: var(--primary);
+        color: #ffffff;
+    }
+</style>
+
+<!-- Filter and Search Header -->
+<div class="filter-card">
+    <div style="flex: 1; min-width: 250px; position: relative;">
+        <input type="text" id="studentManagementSearch" class="form-control" placeholder="Search by student name, ID, or department...">
+    </div>
+    <div style="display: flex; gap: 10px;">
+        <select id="riskFilter" class="form-control" style="width: auto;">
+            <option value="all">All Risk Levels</option>
+            <option value="High Risk">High Risk (Critical)</option>
+            <option value="Medium Risk">Medium Risk (Moderate)</option>
+            <option value="Low Risk">Low Risk (Proficient)</option>
+        </select>
+        <button type="button" class="btn btn-primary" onclick="openNewStudentModal()">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <span>Add Student</span>
+        </button>
+    </div>
+</div>
+
+<!-- Comprehensive Students Table -->
+<div class="card">
+    <div class="card-header">
+        <h3>
+            <svg class="icon" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <span>Enrolled Students Master Registry ({{ students|length }} Students)</span>
+        </h3>
+    </div>
+
+    <div class="table-container">
+        <table id="masterStudentsTable">
+            <thead>
+                <tr>
+                    <th>Student ID</th>
+                    <th>Name</th>
+                    <th>Department</th>
+                    <th>Overall Performance</th>
+                    <th>Learning Gap</th>
+                    <th>Gap Classification</th>
+                    <th>Account Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for st in students %}
+                <tr data-risk="{{ st['overall_risk'] }}">
+                    <td style="font-family: monospace; font-weight: 700; color: var(--primary);">
+                        {{ st["student_id"] }}
+                    </td>
+                    <td>
+                        <div style="font-weight: 600;">{{ st["name"] if st["name"] else "Student " ~ st["student_id"] }}</div>
+                        <div style="font-size: 11.5px; color: var(--text-secondary);">{{ st["email"] if st["email"] else "student@edulearn.ai" }}</div>
+                    </td>
+                    <td>
+                        {{ st["department"] if st["department"] else "Computer Science" }}
+                    </td>
+                    <td>
+                        <div style="font-weight: 600; color: #ffffff;">{{ "%.1f"|format((st["average_quiz_score"] + st["average_assignment_score"]) / 2) }}%</div>
+                        <div style="font-size: 11px; color: var(--text-muted);">Quiz: {{ "%.1f"|format(st["average_quiz_score"]) }}% | Asgn: {{ "%.1f"|format(st["average_assignment_score"]) }}%</div>
+                    </td>
+                    <td>
+                        <span style="font-weight: 600; color: {% if st['average_learning_gap'] >= 60 %}#f87171{% elif st['average_learning_gap'] >= 30 %}#fbbf24{% else %}#34d399{% endif %};">
+                            {{ "%.1f"|format(st["average_learning_gap"]) }}%
+                        </span>
+                    </td>
+                    <td>
+                        {% if st["overall_risk"] == "High Risk" %}
+                            <span class="badge badge-high">High Gap</span>
+                        {% elif st["overall_risk"] == "Medium Risk" %}
+                            <span class="badge badge-medium">Medium Gap</span>
+                        {% else %}
+                            <span class="badge badge-low">Low Gap</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge badge-low">Active</span>
+                    </td>
+                    <td>
+                        <div class="action-btn-group">
+                            <a href="{{ url_for('student_details', student_id=st['student_id']) }}" class="action-badge" title="View Student Deep Dive Profile">
+                                <span>Profile</span>
+                            </a>
+                            <a href="{{ url_for('guide_student_view', student_id=st['student_id']) }}" class="action-badge" style="color: #818cf8; border-color: rgba(99, 102, 241, 0.4);" title="Personalized Academic Guidance">
+                                <span>Guide</span>
+                            </a>
+                            <a href="{{ url_for('assessments_page') }}" class="action-badge" title="Assign Test or Quiz">
+                                <span>Assign Test</span>
+                            </a>
+                            <a href="{{ url_for('youtube_resources_page') }}" class="action-badge" title="Recommend Learning Videos">
+                                <span>Recommend YT</span>
+                            </a>
+                            <a href="{{ url_for('proctoring_review_page') }}" class="action-badge" title="Review Proctoring Logs">
+                                <span>Proctoring</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal for Adding Student -->
+<div id="newStudentModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 100; align-items: center; justify-content: center; padding: 20px;">
+    <div class="card" style="max-width: 500px; width: 100%; box-shadow: 0 20px 40px rgba(0,0,0,0.6);">
+        <div class="card-header">
+            <h3>Add New Student Record</h3>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="closeNewStudentModal()">Close</button>
+        </div>
+        <form method="POST" action="{{ url_for('admin_add_student') }}">
+            <div class="form-group">
+                <label class="form-label">Student ID (e.g. S101)</label>
+                <input type="text" name="student_id" class="form-control" required placeholder="S101">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Full Name</label>
+                <input type="text" name="name" class="form-control" required placeholder="Student Name">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Email Address</label>
+                <input type="email" name="email" class="form-control" required placeholder="student@example.com">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Department / Course</label>
+                <input type="text" name="department" class="form-control" value="Computer Science">
+            </div>
+            <button type="submit" class="btn btn-primary" style="width: 100%;">Create Student Account</button>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function openNewStudentModal() {
+        document.getElementById('newStudentModal').style.display = 'flex';
+    }
+    function closeNewStudentModal() {
+        document.getElementById('newStudentModal').style.display = 'none';
+    }
+
+    const searchInput = document.getElementById('studentManagementSearch');
+    const riskFilter = document.getElementById('riskFilter');
+
+    function filterTable() {
+        const query = searchInput.value.toLowerCase();
+        const selectedRisk = riskFilter.value;
+        const rows = document.querySelectorAll('#masterStudentsTable tbody tr');
+
+        rows.forEach(row => {
+            const text = row.textContent.toLowerCase();
+            const risk = row.getAttribute('data-risk');
+            const matchesText = text.includes(query);
+            const matchesRisk = (selectedRisk === 'all' || risk === selectedRisk);
+
+            row.style.display = (matchesText && matchesRisk) ? '' : 'none';
+        });
+    }
+
+    if (searchInput) searchInput.addEventListener('input', filterTable);
+    if (riskFilter) riskFilter.addEventListener('change', filterTable);
+</script>
+{% endblock %}

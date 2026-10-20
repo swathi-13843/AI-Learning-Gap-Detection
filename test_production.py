@@ -52,7 +52,11 @@ def test_routes():
         sess["role"] = "admin"
         sess["student_id"] = None
 
-    for endpoint in ["/", "/quizzes", "/assignments", "/topics", "/analytics", "/interventions", "/student/S001", "/settings"]:
+    # Admin should get 302 redirect on student-only /quizzes
+    r_quiz = client.get("/quizzes")
+    assert r_quiz.status_code == 302, f"Admin should be redirected from /quizzes, got {r_quiz.status_code}"
+
+    for endpoint in ["/", "/assessments", "/assignments", "/topics", "/analytics", "/interventions", "/student/S001", "/settings"]:
         r = client.get(endpoint)
         assert r.status_code == 200, f"Endpoint {endpoint} failed with code {r.status_code}"
     print("[TEST PASSED] Admin authenticated routes verified with 200 OK.")

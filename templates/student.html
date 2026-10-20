@@ -69,9 +69,13 @@
     </div>
     <div class="card" style="padding: 16px;">
         <span style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">Learning Gap Index</span>
-        <div style="font-size: 24px; font-weight: 700; color: {% if student['average_learning_gap'] >= 60 %}#f87171{% elif student['average_learning_gap'] >= 30 %}#fbbf24{% else %}#34d399{% endif %}; margin-top: 4px;">
-            {{ "%.1f"|format(student['average_learning_gap']) }}%
-        </div>
+        {% if student['average_learning_gap'] >= 60 %}
+        <div style="font-size: 24px; font-weight: 700; color: #f87171; margin-top: 4px;">{{ "%.1f"|format(student['average_learning_gap']) }}%</div>
+        {% elif student['average_learning_gap'] >= 30 %}
+        <div style="font-size: 24px; font-weight: 700; color: #fbbf24; margin-top: 4px;">{{ "%.1f"|format(student['average_learning_gap']) }}%</div>
+        {% else %}
+        <div style="font-size: 24px; font-weight: 700; color: #34d399; margin-top: 4px;">{{ "%.1f"|format(student['average_learning_gap']) }}%</div>
+        {% endif %}
     </div>
     <div class="card" style="padding: 16px;">
         <span style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">Cohort Attendance</span>
@@ -141,6 +145,96 @@
         </div>
     </div>
 </div>
+
+
+<!-- Examination & Assessment History -->
+<div class="card" style="margin-bottom: 28px;">
+    <div class="card-header">
+        <h3>
+            <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <span>Examination Attempts & Evaluation History</span>
+        </h3>
+    </div>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Attempt ID</th>
+                    <th>Assessment Title</th>
+                    <th>Started At</th>
+                    <th>Score</th>
+                    <th>Percentage</th>
+                    <th>Status</th>
+                    <th>Proctoring Flags</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for att in assessment_history %}
+                <tr>
+                    <td style="font-family: monospace;">#{{ att['id'] }}</td>
+                    <td style="font-weight: 600;">{{ att['assessment_title'] }}</td>
+                    <td style="font-size: 12px; color: var(--text-secondary);">{{ att['started_at'] }}</td>
+                    <td><strong>{{ "%.1f"|format(att['score']) }} / {{ att['max_score'] }}</strong></td>
+                    <td>
+                        {% if att['percentage'] >= att['passing_marks'] %}
+                        <span style="font-weight: 700; color: #34d399;">{{ "%.1f"|format(att['percentage']) }}%</span>
+                        {% else %}
+                        <span style="font-weight: 700; color: #f87171;">{{ "%.1f"|format(att['percentage']) }}%</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {% if att['status'] == 'evaluated' %}badge-low{% elif att['status'] == 'submitted' %}badge-medium{% else %}badge-neutral{% endif %}">
+                            {{ att['status']|upper }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if att['proctoring_flag_count'] > 0 %}
+                            <span class="badge badge-high">{{ att['proctoring_flag_count'] }} Flags</span>
+                        {% else %}
+                            <span class="badge badge-low">Clean</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="7" style="text-align: center; color: var(--text-secondary); padding: 20px;">
+                        No examinations taken yet.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Admin Guidance History -->
+{% if guidance_history %}
+<div class="card" style="margin-bottom: 28px; border-left: 4px solid var(--primary);">
+    <div class="card-header">
+        <h3>
+            <svg class="icon" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+            <span>Administrator Guidance & Improvement Directives</span>
+        </h3>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 14px;">
+        {% for g in guidance_history %}
+        <div style="background: rgba(99, 102, 241, 0.06); border: 1px solid rgba(99, 102, 241, 0.2); border-radius: var(--radius-md); padding: 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <span style="font-weight: 600; color: var(--primary);">{{ g['admin_name'] }}</span>
+                <span style="font-size: 11.5px; color: var(--text-secondary);">{{ g['created_at'] }}</span>
+            </div>
+            <p style="font-size: 13.5px; color: #ffffff; line-height: 1.5; margin-bottom: 8px;">{{ g['guidance_text'] }}</p>
+            {% if g['improvement_goals'] %}
+            <div style="font-size: 12px; color: #fbbf24; margin-bottom: 4px;"><strong>Goals:</strong> {{ g['improvement_goals'] }}</div>
+            {% endif %}
+            {% if g['recommended_topics'] %}
+            <div style="font-size: 12px; color: #38bdf8;"><strong>Revision:</strong> {{ g['recommended_topics'] }}</div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
 
 {% else %}
 <div class="card" style="text-align: center; padding: 48px;">

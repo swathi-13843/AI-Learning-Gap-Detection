@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+
+{% block title %}Assessment Details: {{ assessment['title'] }} | EduGap AI{% endblock %}
+
+{% block header_title %}Assessment Details & Submission Evaluations{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 20px;">
+    <a href="{{ url_for('assessments_page') }}" class="btn btn-secondary btn-sm">
+        <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+        <span>Back to Assessments</span>
+    </a>
+</div>
+
+<!-- Header Card -->
+<div class="card" style="margin-bottom: 24px;">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px;">
+        <div>
+            <div style="font-size: 12px; font-weight: 600; text-transform: uppercase; color: var(--primary); letter-spacing: 0.05em; margin-bottom: 4px;">
+                {{ assessment['subject'] }} &bull; {{ assessment['topic'] }}
+            </div>
+            <h2 style="font-family: 'Outfit', sans-serif; font-size: 22px; color: #ffffff; margin-bottom: 6px;">{{ assessment['title'] }}</h2>
+            <p style="font-size: 13.5px; color: var(--text-secondary); max-width: 750px;">{{ assessment['description'] }}</p>
+        </div>
+        <div style="text-align: right;">
+            {% if assessment['is_proctored'] %}
+            <span class="badge badge-medium" style="font-size: 12px; padding: 6px 12px; margin-bottom: 8px;">
+                <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                Proctored Examination
+            </span>
+            {% endif %}
+            <div style="font-size: 13px; color: var(--text-secondary);">Duration: <strong>{{ assessment['duration_minutes'] }} mins</strong> | Total Marks: <strong>{{ assessment['total_marks'] }}</strong></div>
+        </div>
+    </div>
+</div>
+
+<!-- Student Submissions & Evaluations Table -->
+<div class="card">
+    <div class="card-header">
+        <h3>
+            <svg class="icon" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            <span>Candidate Attempts & Evaluation Status ({{ attempts|length }} Attempts)</span>
+        </h3>
+    </div>
+
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Student ID</th>
+                    <th>Candidate Name</th>
+                    <th>Started At</th>
+                    <th>Submitted At</th>
+                    <th>Score</th>
+                    <th>Percentage</th>
+                    <th>Status</th>
+                    <th>Proctoring Flags</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for att in attempts %}
+                <tr>
+                    <td style="font-family: monospace; font-weight: 600; color: var(--primary);">
+                        {{ att['student_id'] }}
+                    </td>
+                    <td style="font-weight: 500;">
+                        {{ att['student_name'] if att['student_name'] else 'Candidate ' ~ att['student_id'] }}
+                    </td>
+                    <td style="font-size: 12px; color: var(--text-secondary);">
+                        {{ att['started_at'] }}
+                    </td>
+                    <td style="font-size: 12px; color: var(--text-secondary);">
+                        {{ att['submitted_at'] if att['submitted_at'] else 'In Progress' }}
+                    </td>
+                    <td>
+                        <strong>{{ "%.1f"|format(att['score']) }} / {{ att['max_score'] }}</strong>
+                    </td>
+                    <td>
+                        <span style="font-weight: 700; color: {% if att['percentage'] >= assessment['passing_marks'] %}#34d399{% else %}#f87171{% endif %};">
+                            {{ "%.1f"|format(att['percentage']) }}%
+                        </span>
+                    </td>
+                    <td>
+                        {% if att['status'] == 'submitted' %}
+                            <span class="badge badge-medium">Submitted</span>
+                        {% elif att['status'] == 'evaluated' %}
+                            <span class="badge badge-low">Evaluated</span>
+                        {% else %}
+                            <span class="badge badge-neutral">In Progress</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if att['proctoring_flag_count'] > 0 %}
+                            <span class="badge badge-high">{{ att['proctoring_flag_count'] }} Flags</span>
+                        {% else %}
+                            <span class="badge badge-low">Clean</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a href="{{ url_for('evaluate_attempt_view', attempt_id=att['id']) }}" class="btn btn-secondary btn-sm">
+                            <span>Evaluate / Review</span>
+                        </a>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="9" style="text-align: center; color: var(--text-secondary); padding: 24px;">
+                        No student attempts submitted for this examination yet.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

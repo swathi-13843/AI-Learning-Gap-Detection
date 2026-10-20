@@ -57,14 +57,44 @@ def dashboard():
     connection = get_db_connection()
 
     if session.get("role") == "student":
-        student_id = session.get("student_id")
+        student_id = session.get("student_id") or "S001"
         student = connection.execute(
             "SELECT * FROM students WHERE student_id = ?",
             (student_id,)
         ).fetchone()
 
+        # Fetch student personalized guidance from Admin
+        student_guidance_list = connection.execute("""
+            SELECT * FROM student_guidance
+            WHERE student_id = ?
+            ORDER BY id DESC LIMIT 5
+        """, (student_id,)).fetchall()
+
+        # Fetch weak topics from learning_gaps and student answers
+        weak_topics = connection.execute("""
+            SELECT topic FROM learning_gaps
+            WHERE student_id = ? AND learning_gap_score >= 30.0
+            ORDER BY learning_gap_score DESC
+        """, (student_id,)).fetchall()
+        weak_topic_names = [w["topic"] for w in weak_topics]
+
+        # Fetch recommended YouTube videos matching weak topics or assigned specifically
+        if weak_topic_names:
+            placeholders = ",".join("?" for _ in weak_topic_names)
+            recommended_videos = connection.execute(f"""
+                SELECT * FROM youtube_resources
+                WHERE topic IN ({placeholders}) OR assigned_to_student_id = ?
+                ORDER BY id DESC LIMIT 6
+            """, (*weak_topic_names, student_id)).fetchall()
+        else:
+            recommended_videos = connection.execute("""
+                SELECT * FROM youtube_resources
+                ORDER BY id DESC LIMIT 6
+            """).fetchall()
+
+        connection.close()
+
         if student is None:
-            connection.close()
             return render_template(
                 "dashboard.html",
                 total_students=0,
@@ -72,10 +102,11 @@ def dashboard():
                 medium_risk=0,
                 low_risk=0,
                 students=[],
-                current_student=None
+                current_student=None,
+                student_guidance_list=[],
+                recommended_videos=[]
             )
 
-        connection.close()
         return render_template(
             "dashboard.html",
             total_students=1,
@@ -83,14 +114,25 @@ def dashboard():
             medium_risk=1 if student["overall_risk"] == "Medium Risk" else 0,
             low_risk=1 if student["overall_risk"] == "Low Risk" else 0,
             students=[student],
-            current_student=student
+            current_student=student,
+            student_guidance_list=student_guidance_list,
+            recommended_videos=recommended_videos
         )
 
-    # ADMIN / INSTRUCTOR DASHBOARD
+    # ADMIN / ACADEMIC MONITOR CONSOLE
     total_students = connection.execute("SELECT COUNT(*) FROM students").fetchone()[0]
     high_risk = connection.execute("SELECT COUNT(*) FROM students WHERE overall_risk = 'High Risk'").fetchone()[0]
     medium_risk = connection.execute("SELECT COUNT(*) FROM students WHERE overall_risk = 'Medium Risk'").fetchone()[0]
     low_risk = connection.execute("SELECT COUNT(*) FROM students WHERE overall_risk = 'Low Risk'").fetchone()[0]
+
+    # Real database statistics for Admin Overview
+    active_assessments = connection.execute("SELECT COUNT(*) FROM assessments WHERE is_published = 1").fetchone()[0]
+    total_quizzes = connection.execute("SELECT COUNT(*) FROM quizzes").fetchone()[0]
+    flagged_proctoring_count = connection.execute("SELECT COUNT(*) FROM assessment_attempts WHERE proctoring_flag_count > 0").fetchone()[0]
+    pending_evaluations = connection.execute("SELECT COUNT(*) FROM assessment_attempts WHERE status = 'submitted'").fetchone()[0]
+    total_yt_resources = connection.execute("SELECT COUNT(*) FROM youtube_resources").fetchone()[0]
+    avg_gap_row = connection.execute("SELECT AVG(average_learning_gap) FROM students").fetchone()
+    cohort_avg_gap = round(avg_gap_row[0], 1) if avg_gap_row and avg_gap_row[0] is not None else 35.0
 
     students = connection.execute("""
         SELECT *
@@ -104,9 +146,15 @@ def dashboard():
     return render_template(
         "dashboard.html",
         total_students=total_students,
+        cohort_avg_gap=cohort_avg_gap,
+        total_quizzes=total_quizzes,
         high_risk=high_risk,
         medium_risk=medium_risk,
         low_risk=low_risk,
+        active_assessments=active_assessments,
+        flagged_proctoring_count=flagged_proctoring_count,
+        pending_evaluations=pending_evaluations,
+        total_yt_resources=total_yt_resources,
         students=students,
         current_student=None
     )
@@ -128,90 +176,14 @@ def login():
         connection.close()
 
         if user and check_password_hash(user["password"], password):
+            # Enforce strictly two roles: admin and student
+            role = "admin" if user["role"] in ["admin", "mentor"] else "student"
             session["user_id"] = user["id"]
             session["username"] = user["username"]
-            session["role"] = user["role"]
+            session["role"] = role
             session["student_id"] = user["student_id"]
-            
-            if user["role"] == "mentor":
-                conn = get_db_connection()
-                mentor_rec = conn.execute("SELECT id, name FROM mentors WHERE user_id = ? OR email = ?", (user["id"], user["email"])).fetchone()
-                if mentor_rec:
-                    session["mentor_id"] = mentor_rec["id"]
-                    session["mentor_name"] = mentor_rec["name"]
-                else:
-                    session["mentor_name"] = user["username"]
-                conn.close()
 
-            elif user["role"] == "student" and user["student_id"]:
-                # Ensure logging-in student has an active intervention and assigned mentor
-                st_id = user["student_id"]
-                conn = get_db_connection()
-                
-                # Check for active intervention
-                active_int = conn.execute("""
-                    SELECT id, mentor_name, mentor_id, status FROM interventions
-                    WHERE student_id = ? AND status != 'Resolved'
-                    ORDER BY id DESC LIMIT 1
-                """, (st_id,)).fetchone()
-
-                if not active_int or not active_int["mentor_name"]:
-                    # Select mentor with lowest active mentee workload
-                    chosen_mentor = conn.execute("""
-                        SELECT m.id, m.name, m.title, m.specialty, COUNT(i.id) as load
-                        FROM mentors m
-                        LEFT JOIN interventions i ON (i.mentor_id = m.id OR i.mentor_name = m.name) AND i.status != 'Resolved'
-                        GROUP BY m.id
-                        ORDER BY load ASC, m.id ASC
-                        LIMIT 1
-                    """).fetchone()
-
-                    # Retrieve student stats for context
-                    st_row = conn.execute("SELECT name, overall_risk, average_learning_gap FROM students WHERE student_id = ?", (st_id,)).fetchone()
-                    st_name = st_row["name"] if st_row else user["username"].title()
-                    target_gap = float(st_row["average_learning_gap"]) if (st_row and st_row["average_learning_gap"]) else 45.0
-                    risk_lvl = st_row["overall_risk"] if (st_row and st_row["overall_risk"]) else "Medium Risk"
-
-                    cur = conn.cursor()
-                    if active_int:
-                        # Update existing intervention with assigned mentor
-                        cur.execute("""
-                            UPDATE interventions
-                            SET mentor_id = ?, mentor_name = ?, status = 'In Progress', updated_at = datetime('now')
-                            WHERE id = ?
-                        """, (chosen_mentor["id"], chosen_mentor["name"], active_int["id"]))
-                        int_id = active_int["id"]
-                    else:
-                        # Determine intervention type based on learning gap / risk
-                        if target_gap >= 60.0 or risk_lvl == "High Risk":
-                            int_type = "1-on-1 Dedicated Faculty Mentorship"
-                            desc = "Weekly 45-minute clinical tutoring sessions with domain faculty mentor."
-                            ai_sol = "Personalized concept mastery refreshers and homework reviews."
-                        elif target_gap >= 35.0:
-                            int_type = "Micro-Quiz Adaptive Remediation Loop"
-                            desc = "Targeted adaptive quiz loops with continuous performance tracking."
-                            ai_sol = "Topic-specific micro-assessments and immediate explanatory feedback."
-                        else:
-                            int_type = "Academic Counseling & Mentorship"
-                            desc = "Academic wellness, schedule check-ins, and study milestones."
-                            ai_sol = "Weekly milestone alignment and guided academic roadmaps."
-
-                        cur.execute("""
-                            INSERT INTO interventions (student_id, intervention_type, mentor_name, mentor_id, description, ai_recommended, progress_pct, status, target_gap, created_at, updated_at)
-                            VALUES (?, ?, ?, ?, ?, ?, 25, 'In Progress', ?, datetime('now'), datetime('now'))
-                        """, (st_id, int_type, chosen_mentor["name"], chosen_mentor["id"], desc, ai_sol, target_gap))
-                        int_id = cur.lastrowid
-
-                    # Record in mentor_assignments table
-                    cur.execute("""
-                        INSERT INTO mentor_assignments (intervention_id, student_id, mentor_id, mentor_name, assigned_by)
-                        VALUES (?, ?, ?, ?, 'System AI Auto-Assign')
-                    """, (int_id, st_id, chosen_mentor["id"], chosen_mentor["name"]))
-
-                    conn.commit()
-                conn.close()
-
-            flash(f"Welcome back, {session.get('mentor_name', user['username'])}.", "success")
+            flash(f"Welcome back, {user['username'].title()}.", "success")
             return redirect(url_for("dashboard"))
 
         flash("Invalid credentials supplied. Please check and retry.", "error")
@@ -434,6 +406,11 @@ def update_performance():
 @app.route("/student/<student_id>")
 @login_required
 def student_details(student_id):
+    # Enforce access authorization: Students can only view their own profile
+    if session.get("role") == "student" and session.get("student_id") != student_id:
+        flash("Unauthorized access. You may only view your personal academic record.", "error")
+        return redirect(url_for("dashboard"))
+
     connection = get_db_connection()
 
     student = connection.execute(
@@ -452,13 +429,48 @@ def student_details(student_id):
         WHERE student_id = ?
     """, (student_id,)).fetchall()
 
+    # Guidance history published by Admin
+    guidance_history = connection.execute("""
+        SELECT * FROM student_guidance
+        WHERE student_id = ?
+        ORDER BY id DESC
+    """, (student_id,)).fetchall()
+
+    # Test and examination history
+    assessment_history = connection.execute("""
+        SELECT att.*, a.title as assessment_title, a.passing_marks
+        FROM assessment_attempts att
+        JOIN assessments a ON a.id = att.assessment_id
+        WHERE att.student_id = ?
+        ORDER BY att.id DESC
+    """, (student_id,)).fetchall()
+
+    # YouTube resources recommended for this student
+    weak_topic_names = [g["topic"] for g in gaps if g["learning_gap_score"] >= 30.0]
+    if weak_topic_names:
+        placeholders = ",".join("?" for _ in weak_topic_names)
+        recommended_videos = connection.execute(f"""
+            SELECT * FROM youtube_resources
+            WHERE topic IN ({placeholders}) OR assigned_to_student_id = ?
+            ORDER BY id DESC LIMIT 6
+        """, (*weak_topic_names, student_id)).fetchall()
+    else:
+        recommended_videos = connection.execute("""
+            SELECT * FROM youtube_resources
+            WHERE assigned_to_student_id = ? OR assigned_to_student_id IS NULL OR assigned_to_student_id = ''
+            ORDER BY id DESC LIMIT 6
+        """, (student_id,)).fetchall()
+
     connection.close()
 
     return render_template(
         "student.html",
         student=student,
         gaps=gaps,
-        recommendations=recommendations
+        recommendations=recommendations,
+        guidance_history=guidance_history,
+        assessment_history=assessment_history,
+        recommended_videos=recommended_videos
     )
 
 # ============================================================
@@ -467,6 +479,10 @@ def student_details(student_id):
 @app.route("/quizzes")
 @login_required
 def quizzes_page():
+    if session.get("role") == "admin":
+        flash("Adaptive Quizzes are designed for student conceptual mastery evaluation. For administrator tests, use Assessments & Tests.", "info")
+        return redirect(url_for("assessments_page"))
+
     connection = get_db_connection()
     quizzes = connection.execute("""
         SELECT q.*, t.topic_name, t.subject
@@ -490,6 +506,10 @@ def quizzes_page():
 @app.route("/quiz/<int:quiz_id>", methods=["GET", "POST"])
 @login_required
 def quiz_detail(quiz_id):
+    if session.get("role") == "admin":
+        flash("Adaptive Quizzes are reserved for student evaluation.", "info")
+        return redirect(url_for("assessments_page"))
+
     connection = get_db_connection()
     quiz = connection.execute("""
         SELECT q.*, t.topic_name, t.subject
@@ -571,12 +591,14 @@ def quiz_detail(quiz_id):
     return render_template("quiz_detail.html", quiz=quiz, questions=questions)
 
 # ============================================================
-# ASSIGNMENTS
+# ASSIGNMENTS & PROJECT EVALUATION
 # ============================================================
 @app.route("/assignments")
 @login_required
 def assignments_page():
     connection = get_db_connection()
+    role = session.get("role")
+    
     assignments = connection.execute("""
         SELECT a.*, t.topic_name, t.subject
         FROM assignments a
@@ -584,19 +606,34 @@ def assignments_page():
         ORDER BY a.id
     """).fetchall()
 
-    student_id = session.get("student_id") or "S001"
-    submissions = connection.execute("""
-        SELECT * FROM submissions WHERE student_id = ?
-    """, (student_id,)).fetchall()
-    
-    submission_map = {sub["assignment_id"]: sub for sub in submissions}
-    connection.close()
-
-    return render_template("assignments.html", assignments=assignments, submission_map=submission_map)
+    if role == "admin":
+        # Admin view: Fetch all student submissions with student name, project details, and grading status
+        submissions = connection.execute("""
+            SELECT s.*, a.title as assignment_title, a.max_score, st.name as student_name, st.department
+            FROM submissions s
+            JOIN assignments a ON s.assignment_id = a.id
+            LEFT JOIN students st ON s.student_id = st.student_id
+            ORDER BY s.id DESC
+        """).fetchall()
+        connection.close()
+        return render_template("assignments.html", assignments=assignments, submissions=submissions, is_admin=True)
+    else:
+        # Student view: Fetch submissions made by current student
+        student_id = session.get("student_id") or "S001"
+        submissions = connection.execute("""
+            SELECT * FROM submissions WHERE student_id = ?
+        """, (student_id,)).fetchall()
+        submission_map = {sub["assignment_id"]: sub for sub in submissions}
+        connection.close()
+        return render_template("assignments.html", assignments=assignments, submission_map=submission_map, is_admin=False)
 
 @app.route("/assignment/submit/<int:assignment_id>", methods=["POST"])
 @login_required
 def submit_assignment(assignment_id):
+    if session.get("role") == "admin":
+        flash("Administrators do not submit assignments. Use the Evaluation console to review and score student deliverables.", "info")
+        return redirect(url_for("assignments_page"))
+
     student_id = session.get("student_id") or "S001"
     github_repo = request.form.get("github_repo", "").strip()
     comments = request.form.get("comments", "").strip()
@@ -618,16 +655,63 @@ def submit_assignment(assignment_id):
         flash("Assignment not found.", "error")
         return redirect(url_for("assignments_page"))
 
-    # Record submission with status Submitted and score
-    awarded_score = 90.0
+    # Initial submission status is 'Submitted' with 0.0 awarded until Admin grades it
+    initial_score = 0.0
     connection.execute("""
         INSERT INTO submissions (assignment_id, student_id, score, status, feedback, file_name, github_repo, comments)
-        VALUES (?, ?, ?, 'Submitted', 'Submission logged successfully. Evaluator code review queued.', ?, ?, ?)
-    """, (assignment_id, student_id, awarded_score, file_name, github_repo, comments))
+        VALUES (?, ?, ?, 'Pending Evaluation', 'Submission uploaded successfully. Awaiting administrator evaluation and score.', ?, ?, ?)
+    """, (assignment_id, student_id, initial_score, file_name, github_repo, comments))
 
-    # Update student average_assignment_score
+    connection.commit()
+    connection.close()
+
+    flash(f"Deliverable for '{assignment['title']}' submitted successfully! Awaiting administrator evaluation.", "success")
+    return redirect(url_for("assignments_page"))
+
+@app.route("/admin/grade-submission/<int:submission_id>", methods=["POST"])
+@login_required
+def admin_grade_submission(submission_id):
+    if session.get("role") != "admin":
+        flash("Access restricted to Academic Administrators.", "error")
+        return redirect(url_for("dashboard"))
+
+    marks_str = request.form.get("score", "").strip()
+    feedback = request.form.get("feedback", "").strip() or "Evaluation completed by academic administrator."
+
+    try:
+        score = float(marks_str)
+    except ValueError:
+        flash("Invalid numerical score entered.", "error")
+        return redirect(url_for("assignments_page"))
+
+    connection = get_db_connection()
+    submission = connection.execute("""
+        SELECT s.*, a.max_score FROM submissions s
+        JOIN assignments a ON s.assignment_id = a.id
+        WHERE s.id = ?
+    """, (submission_id,)).fetchone()
+
+    if not submission:
+        connection.close()
+        flash("Submission record not found.", "error")
+        return redirect(url_for("assignments_page"))
+
+    max_sc = float(submission["max_score"])
+    if score < 0 or score > max_sc:
+        connection.close()
+        flash(f"Score must be between 0 and {max_sc}.", "error")
+        return redirect(url_for("assignments_page"))
+
+    connection.execute("""
+        UPDATE submissions
+        SET score = ?, status = 'Graded', feedback = ?
+        WHERE id = ?
+    """, (score, feedback, submission_id))
+
+    # Recalculate student average_assignment_score
+    student_id = submission["student_id"]
     sub_avg = connection.execute("""
-        SELECT AVG(score) as avg_sc FROM submissions WHERE student_id = ?
+        SELECT AVG(score) as avg_sc FROM submissions WHERE student_id = ? AND status = 'Graded'
     """, (student_id,)).fetchone()
 
     if sub_avg and sub_avg["avg_sc"] is not None:
@@ -638,7 +722,7 @@ def submit_assignment(assignment_id):
     connection.commit()
     connection.close()
 
-    flash(f"Work submitted for '{assignment['title']}'! Submission recorded with evaluator review in progress.", "success")
+    flash(f"Graded submission #{submission_id} for student {student_id}: awarded {score}/{max_sc} marks.", "success")
     return redirect(url_for("assignments_page"))
 
 # ============================================================
@@ -661,7 +745,36 @@ def topics_page():
     weak_topics = []
     topics_with_status = []
 
-    if student_id:
+    role = session.get("role")
+    student_languages = []
+
+    if role == "admin":
+        # Admin view: purely managing curriculum topics
+        for t in all_topics:
+            topics_with_status.append({
+                "id": t["id"],
+                "topic_name": t["topic_name"],
+                "subject": t["subject"],
+                "description": t["description"],
+                "is_covered": True,
+                "score": 100.0,
+                "gap": 0.0,
+                "status_tier": "strong",
+                "gap_category": "Curriculum Standard",
+                "priority": "Active"
+            })
+        covered_count = total_count
+        remaining_count = 0
+        strong_topics = []
+        weak_topics = []
+    else:
+        # Student view: fetch student-specific learning gaps and student languages
+        student_id = session.get("student_id") or "S001"
+        student_lang_rows = connection.execute("""
+            SELECT * FROM student_languages WHERE student_id = ? ORDER BY id DESC
+        """, (student_id,)).fetchall()
+        student_languages = [dict(lr) for lr in student_lang_rows]
+
         # Fetch student_topics records
         st_rows = connection.execute("""
             SELECT st.*, t.topic_name, t.subject, t.description
@@ -672,7 +785,6 @@ def topics_page():
 
         st_map = {row["topic_id"]: row for row in st_rows}
 
-        # If student has no student_topics records yet, check learning_gaps
         if not st_map:
             gaps_rows = connection.execute("""
                 SELECT lg.*, t.id as t_id, t.subject, t.description
@@ -704,7 +816,6 @@ def topics_page():
                 if covered:
                     covered_count += 1
                 
-                # Classification of strength
                 if score >= 70 or gap < 30:
                     status_tier = "strong"
                     strong_topics.append(t["topic_name"])
@@ -739,57 +850,9 @@ def topics_page():
                     "gap_category": "Pending",
                     "priority": "Unassessed"
                 })
-    else:
-        # Admin view - Cohort aggregate coverage
-        cohort_stats = connection.execute("""
-            SELECT topic_id, AVG(score) as avg_score, AVG(learning_gap_score) as avg_gap
-            FROM student_topics
-            GROUP BY topic_id
-        """).fetchall()
-        cohort_map = {row["topic_id"]: row for row in cohort_stats}
 
-        for t in all_topics:
-            tid = t["id"]
-            if tid in cohort_map:
-                c_avg_sc = round(float(cohort_map[tid]["avg_score"]), 1)
-                c_avg_gap = round(float(cohort_map[tid]["avg_gap"]), 1)
-                covered_count += 1
-                if c_avg_sc >= 70:
-                    strong_topics.append(t["topic_name"])
-                    status_tier = "strong"
-                elif c_avg_gap >= 45:
-                    weak_topics.append(t["topic_name"])
-                    status_tier = "weak"
-                else:
-                    status_tier = "moderate"
+        remaining_count = max(0, total_count - covered_count)
 
-                topics_with_status.append({
-                    "id": t["id"],
-                    "topic_name": t["topic_name"],
-                    "subject": t["subject"],
-                    "description": t["description"],
-                    "is_covered": True,
-                    "score": c_avg_sc,
-                    "gap": c_avg_gap,
-                    "status_tier": status_tier,
-                    "gap_category": "Cohort Metric",
-                    "priority": "Monitored"
-                })
-            else:
-                topics_with_status.append({
-                    "id": t["id"],
-                    "topic_name": t["topic_name"],
-                    "subject": t["subject"],
-                    "description": t["description"],
-                    "is_covered": False,
-                    "score": 50.0,
-                    "gap": 50.0,
-                    "status_tier": "moderate",
-                    "gap_category": "Syllabus Standard",
-                    "priority": "Scheduled"
-                })
-
-    remaining_count = max(0, total_count - covered_count)
     connection.close()
 
     return render_template(
@@ -800,8 +863,114 @@ def topics_page():
         remaining_count=remaining_count,
         strong_topics=strong_topics,
         weak_topics=weak_topics,
-        curriculum_roadmap=CURRICULUM_ROADMAP
+        student_languages=student_languages,
+        curriculum_roadmap=CURRICULUM_ROADMAP,
+        is_admin=(role == "admin")
     )
+
+@app.route("/admin/topics/add", methods=["POST"])
+@login_required
+def admin_add_topic():
+    if session.get("role") != "admin":
+        flash("Access restricted to Academic Administrators.", "error")
+        return redirect(url_for("topics_page"))
+
+    topic_name = request.form.get("topic_name", "").strip()
+    subject = request.form.get("subject", "").strip() or "Computer Science"
+    description = request.form.get("description", "").strip() or f"Curriculum module covering {topic_name}."
+
+    if not topic_name:
+        flash("Topic name is required.", "error")
+        return redirect(url_for("topics_page"))
+
+    connection = get_db_connection()
+    existing = connection.execute("SELECT id FROM topics WHERE topic_name = ?", (topic_name,)).fetchone()
+    if existing:
+        connection.close()
+        flash(f"Topic '{topic_name}' already exists in syllabus.", "error")
+        return redirect(url_for("topics_page"))
+
+    connection.execute("""
+        INSERT INTO topics (topic_name, subject, description)
+        VALUES (?, ?, ?)
+    """, (topic_name, subject, description))
+    connection.commit()
+    connection.close()
+
+    flash(f"New curriculum topic '{topic_name}' added to knowledge map.", "success")
+    return redirect(url_for("topics_page"))
+
+@app.route("/admin/topics/delete/<int:topic_id>", methods=["POST"])
+@login_required
+def admin_delete_topic(topic_id):
+    if session.get("role") != "admin":
+        flash("Access restricted to Academic Administrators.", "error")
+        return redirect(url_for("topics_page"))
+
+    connection = get_db_connection()
+    topic = connection.execute("SELECT * FROM topics WHERE id = ?", (topic_id,)).fetchone()
+    if not topic:
+        connection.close()
+        flash("Topic not found.", "error")
+        return redirect(url_for("topics_page"))
+
+    connection.execute("DELETE FROM topics WHERE id = ?", (topic_id,))
+    connection.commit()
+    connection.close()
+
+    flash(f"Topic '{topic['topic_name']}' removed from knowledge map.", "success")
+    return redirect(url_for("topics_page"))
+
+@app.route("/student/languages/add", methods=["POST"])
+@login_required
+def student_add_language():
+    student_id = session.get("student_id") or "S001"
+    language_name = request.form.get("language_name", "").strip()
+    proficiency_level = request.form.get("proficiency_level", "Intermediate").strip()
+
+    if not language_name:
+        flash("Language name cannot be blank.", "error")
+        return redirect(url_for("topics_page"))
+
+    connection = get_db_connection()
+    connection.execute("""
+        CREATE TABLE IF NOT EXISTS student_languages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_id TEXT NOT NULL,
+            language_name TEXT NOT NULL,
+            proficiency_level TEXT DEFAULT 'Intermediate',
+            added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(student_id, language_name)
+        )
+    """)
+
+    try:
+        connection.execute("""
+            INSERT INTO student_languages (student_id, language_name, proficiency_level)
+            VALUES (?, ?, ?)
+        """, (student_id, language_name, proficiency_level))
+        connection.commit()
+        flash(f"Programming language '{language_name}' added to your portfolio.", "success")
+    except sqlite3.IntegrityError:
+        flash(f"Language '{language_name}' is already in your skills profile.", "info")
+    finally:
+        connection.close()
+
+    return redirect(url_for("topics_page"))
+
+@app.route("/student/languages/delete/<int:lang_id>", methods=["POST"])
+@login_required
+def student_delete_language(lang_id):
+    student_id = session.get("student_id") or "S001"
+    connection = get_db_connection()
+    connection.execute("""
+        DELETE FROM student_languages WHERE id = ? AND student_id = ?
+    """, (lang_id, student_id))
+    connection.commit()
+    connection.close()
+
+    flash("Programming language removed from your portfolio.", "info")
+    return redirect(url_for("topics_page"))
 
 @app.route("/api/curriculum-roadmap/<path:topic_name>")
 @login_required
@@ -1314,6 +1483,742 @@ def toggle_user_status(user_id):
     connection.close()
 
     return redirect(url_for("settings_page"))
+
+# ============================================================
+# STUDENT MANAGEMENT & GUIDANCE (ADMIN)
+# ============================================================
+@app.route("/students-management")
+@login_required
+def students_management():
+    if session.get("role") != "admin":
+        flash("Access restricted to Academic Administrators.", "error")
+        return redirect(url_for("dashboard"))
+
+    connection = get_db_connection()
+    students = connection.execute("""
+        SELECT * FROM students
+        ORDER BY student_id ASC
+    """).fetchall()
+    connection.close()
+
+    return render_template("students_management.html", students=students)
+
+@app.route("/admin/add-student", methods=["POST"])
+@login_required
+def admin_add_student():
+    if session.get("role") != "admin":
+        flash("Administrative privileges required.", "error")
+        return redirect(url_for("dashboard"))
+
+    student_id = request.form.get("student_id", "").strip().upper()
+    name = request.form.get("name", "").strip()
+    email = request.form.get("email", "").strip()
+    department = request.form.get("department", "Computer Science").strip()
+
+    if not student_id or not name or not email:
+        flash("All student fields are required.", "error")
+        return redirect(url_for("students_management"))
+
+    connection = get_db_connection()
+    existing = connection.execute("SELECT * FROM students WHERE student_id = ?", (student_id,)).fetchone()
+    if existing:
+        connection.close()
+        flash(f"Student ID {student_id} already exists.", "error")
+        return redirect(url_for("students_management"))
+
+    connection.execute("""
+        INSERT INTO students (student_id, name, email, department, average_quiz_score, average_assignment_score, average_learning_gap, average_attendance, overall_risk)
+        VALUES (?, ?, ?, ?, 50.0, 50.0, 50.0, 75.0, 'Medium Risk')
+    """, (student_id, name, email, department))
+
+    # Also register a default student user account if username not taken
+    user_exist = connection.execute("SELECT * FROM users WHERE username = ?", (student_id.lower(),)).fetchone()
+    if not user_exist:
+        pwd_hash = generate_password_hash("student123")
+        connection.execute("""
+            INSERT INTO users (username, email, password, role, student_id)
+            VALUES (?, ?, ?, 'student', ?)
+        """, (student_id.lower(), email, pwd_hash, student_id))
+
+    connection.commit()
+    connection.close()
+
+    flash(f"Student record for {name} ({student_id}) created successfully.", "success")
+    return redirect(url_for("students_management"))
+
+@app.route("/student/guidance")
+@login_required
+def student_guidance_page():
+    if session.get("role") != "admin":
+        flash("Access restricted to Academic Administrators.", "error")
+        return redirect(url_for("dashboard"))
+
+    connection = get_db_connection()
+    students = connection.execute("""
+        SELECT s.*, 
+               (SELECT COUNT(*) FROM student_guidance WHERE student_id = s.student_id) as guidance_count,
+               (SELECT MAX(created_at) FROM student_guidance WHERE student_id = s.student_id) as last_guided
+        FROM students s
+        ORDER BY s.average_learning_gap DESC
+    """).fetchall()
+    connection.close()
+    return render_template("students_management.html", students=students)
+
+@app.route("/student/guidance/<student_id>")
+@login_required
+def guide_student_view(student_id):
+    if session.get("role") != "admin":
+        flash("Access restricted to Academic Administrators.", "error")
+        return redirect(url_for("dashboard"))
+
+    connection = get_db_connection()
+    student = connection.execute("SELECT * FROM students WHERE student_id = ?", (student_id,)).fetchone()
+    if not student:
+        connection.close()
+        flash("Student record not found.", "error")
+        return redirect(url_for("students_management"))
+
+    gaps = connection.execute("""
+        SELECT * FROM learning_gaps WHERE student_id = ? ORDER BY learning_gap_score DESC
+    """, (student_id,)).fetchall()
+
+    guidance_history = connection.execute("""
+        SELECT * FROM student_guidance WHERE student_id = ? ORDER BY id DESC
+    """, (student_id,)).fetchall()
+
+    connection.close()
+    return render_template("student_guidance.html", student=student, gaps=gaps, guidance_history=guidance_history)
+
+@app.route("/student/guidance/save/<student_id>", methods=["POST"])
+@login_required
+def save_student_guidance(student_id):
+    if session.get("role") != "admin":
+        flash("Unauthorized guidance authoring.", "error")
+        return redirect(url_for("dashboard"))
+
+    guidance_text = request.form.get("guidance_text", "").strip()
+    improvement_goals = request.form.get("improvement_goals", "").strip()
+    recommended_topics = request.form.get("recommended_topics", "").strip()
+    practice_assignments = request.form.get("practice_assignments", "").strip()
+
+    if not guidance_text:
+        flash("Guidance feedback cannot be empty.", "error")
+        return redirect(url_for("guide_student_view", student_id=student_id))
+
+    connection = get_db_connection()
+    connection.execute("""
+        INSERT INTO student_guidance (
+            student_id, admin_id, admin_name, guidance_text,
+            improvement_goals, recommended_topics, practice_assignments
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, (
+        student_id,
+        session.get("user_id"),
+        session.get("username", "Academic Administrator").title(),
+        guidance_text,
+        improvement_goals,
+        recommended_topics,
+        practice_assignments
+    ))
+    connection.commit()
+    connection.close()
+
+    flash(f"Personalized study plan & guidance saved for {student_id}.", "success")
+    return redirect(url_for("guide_student_view", student_id=student_id))
+
+# ============================================================
+# ASSESSMENTS & PROCTORED EXAMINATIONS
+# ============================================================
+@app.route("/assessments")
+@login_required
+def assessments_page():
+    connection = get_db_connection()
+    role = session.get("role")
+    student_id = session.get("student_id") or "S001"
+
+    assessments = connection.execute("""
+        SELECT a.*, COUNT(q.id) as q_count
+        FROM assessments a
+        LEFT JOIN assessment_questions q ON q.assessment_id = a.id
+        WHERE a.is_published = 1 OR ? = 'admin'
+        GROUP BY a.id
+        ORDER BY a.id DESC
+    """, (role,)).fetchall()
+
+    student_attempts = {}
+    if role == "student":
+        attempts = connection.execute("""
+            SELECT * FROM assessment_attempts WHERE student_id = ? ORDER BY id DESC
+        """, (student_id,)).fetchall()
+        for att in attempts:
+            if att["assessment_id"] not in student_attempts:
+                student_attempts[att["assessment_id"]] = att
+
+    connection.close()
+    return render_template("assessments.html", assessments=assessments, student_attempts=student_attempts)
+
+@app.route("/assessments/create", methods=["GET", "POST"])
+@login_required
+def admin_create_assessment():
+    if session.get("role") != "admin":
+        flash("Administrative credentials required to author assessments.", "error")
+        return redirect(url_for("dashboard"))
+
+    connection = get_db_connection()
+    if request.method == "POST":
+        title = request.form.get("title", "").strip()
+        description = request.form.get("description", "").strip()
+        subject = request.form.get("subject", "").strip()
+        topic = request.form.get("topic", "").strip()
+        duration_minutes = int(request.form.get("duration_minutes", 30))
+        passing_marks = float(request.form.get("passing_marks", 50.0))
+        negative_marking = float(request.form.get("negative_marking", 0.0))
+        attempt_limit = int(request.form.get("attempt_limit", 1))
+        is_proctored = 1 if request.form.get("is_proctored") else 0
+        shuffle_questions = 1 if request.form.get("shuffle_questions") else 0
+        shuffle_options = 1 if request.form.get("shuffle_options") else 0
+
+        q_types = request.form.getlist("q_type[]")
+        q_texts = request.form.getlist("q_text[]")
+        q_marks_list = request.form.getlist("q_marks[]")
+        q_opt_as = request.form.getlist("q_opt_a[]")
+        q_opt_bs = request.form.getlist("q_opt_b[]")
+        q_opt_cs = request.form.getlist("q_opt_c[]")
+        q_opt_ds = request.form.getlist("q_opt_d[]")
+        q_corrects = request.form.getlist("q_correct[]")
+        q_explanations = request.form.getlist("q_explanation[]")
+
+        total_marks = sum(float(m) for m in q_marks_list) if q_marks_list else 100.0
+
+        cur = connection.cursor()
+        cur.execute("""
+            INSERT INTO assessments (
+                title, description, subject, topic, duration_minutes,
+                passing_marks, total_marks, negative_marking, attempt_limit,
+                shuffle_questions, shuffle_options, is_proctored, created_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            title, description, subject, topic, duration_minutes,
+            passing_marks, total_marks, negative_marking, attempt_limit,
+            shuffle_questions, shuffle_options, is_proctored, session.get("username", "Admin")
+        ))
+        assessment_id = cur.lastrowid
+
+        for i in range(len(q_texts)):
+            if q_texts[i].strip():
+                cur.execute("""
+                    INSERT INTO assessment_questions (
+                        assessment_id, question_text, question_type,
+                        option_a, option_b, option_c, option_d,
+                        correct_answer, marks, explanation
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    assessment_id,
+                    q_texts[i].strip(),
+                    q_types[i] if i < len(q_types) else 'mcq',
+                    q_opt_as[i] if i < len(q_opt_as) else '',
+                    q_opt_bs[i] if i < len(q_opt_bs) else '',
+                    q_opt_cs[i] if i < len(q_opt_cs) else '',
+                    q_opt_ds[i] if i < len(q_opt_ds) else '',
+                    q_corrects[i].strip() if i < len(q_corrects) else 'A',
+                    float(q_marks_list[i]) if i < len(q_marks_list) else 10.0,
+                    q_explanations[i] if i < len(q_explanations) else ''
+                ))
+
+        connection.commit()
+        connection.close()
+
+        flash(f"Assessment '{title}' published successfully with {len(q_texts)} questions.", "success")
+        return redirect(url_for("assessments_page"))
+
+    topics = connection.execute("SELECT topic_name, subject FROM topics ORDER BY subject, topic_name").fetchall()
+    connection.close()
+    return render_template("admin_create_assessment.html", topics=topics)
+
+@app.route("/assessments/<int:assessment_id>")
+@login_required
+def assessment_detail(assessment_id):
+    connection = get_db_connection()
+    assessment = connection.execute("SELECT * FROM assessments WHERE id = ?", (assessment_id,)).fetchone()
+    if not assessment:
+        connection.close()
+        flash("Assessment not found.", "error")
+        return redirect(url_for("assessments_page"))
+
+    attempts = connection.execute("""
+        SELECT att.*, s.name as student_name
+        FROM assessment_attempts att
+        LEFT JOIN students s ON s.student_id = att.student_id
+        WHERE att.assessment_id = ?
+        ORDER BY att.id DESC
+    """, (assessment_id,)).fetchall()
+
+    connection.close()
+    return render_template("assessment_detail.html", assessment=assessment, attempts=attempts)
+
+@app.route("/assessments/take/<int:assessment_id>")
+@login_required
+def take_assessment(assessment_id):
+    if session.get("role") != "student":
+        flash("Admin and evaluator accounts cannot sit for student examination sessions.", "info")
+        return redirect(url_for("assessment_detail", assessment_id=assessment_id))
+
+    student_id = session.get("student_id") or "S001"
+    connection = get_db_connection()
+
+    assessment = connection.execute("SELECT * FROM assessments WHERE id = ?", (assessment_id,)).fetchone()
+    if not assessment:
+        connection.close()
+        flash("Assessment not found.", "error")
+        return redirect(url_for("assessments_page"))
+
+    # Check attempt limit
+    completed_attempts = connection.execute("""
+        SELECT COUNT(*) FROM assessment_attempts
+        WHERE assessment_id = ? AND student_id = ? AND status IN ('submitted', 'evaluated')
+    """, (assessment_id, student_id)).fetchone()[0]
+
+    if completed_attempts >= assessment["attempt_limit"]:
+        connection.close()
+        flash(f"You have reached the maximum attempt limit ({assessment['attempt_limit']}) for this examination.", "error")
+        return redirect(url_for("assessments_page"))
+
+    # Find active attempt or create new attempt
+    cur = connection.cursor()
+    active_attempt = connection.execute("""
+        SELECT * FROM assessment_attempts
+        WHERE assessment_id = ? AND student_id = ? AND status = 'in_progress'
+        ORDER BY id DESC LIMIT 1
+    """, (assessment_id, student_id)).fetchone()
+
+    if not active_attempt:
+        cur.execute("""
+            INSERT INTO assessment_attempts (assessment_id, student_id, max_score, status)
+            VALUES (?, ?, ?, 'in_progress')
+        """, (assessment_id, student_id, assessment["total_marks"]))
+        connection.commit()
+        attempt_id = cur.lastrowid
+        active_attempt = connection.execute("SELECT * FROM assessment_attempts WHERE id = ?", (attempt_id,)).fetchone()
+
+    # Load questions
+    questions = connection.execute("""
+        SELECT * FROM assessment_questions WHERE assessment_id = ? ORDER BY id ASC
+    """, (assessment_id,)).fetchall()
+
+    # Load existing saved answers
+    saved_answers = connection.execute("""
+        SELECT question_id, student_answer FROM assessment_answers WHERE attempt_id = ?
+    """, (active_attempt["id"],)).fetchall()
+    answers_map = {ans["question_id"]: ans["student_answer"] for ans in saved_answers}
+
+    connection.close()
+    return render_template("take_assessment.html", assessment=assessment, attempt=active_attempt, questions=questions, answers_map=answers_map)
+
+@app.route("/api/assessment/autosave", methods=["POST"])
+@login_required
+def api_assessment_autosave():
+    data = request.get_json() or {}
+    attempt_id = data.get("attempt_id")
+    question_id = data.get("question_id")
+    answer = str(data.get("answer", "")).strip()
+    student_id = session.get("student_id") or "S001"
+
+    if not attempt_id or not question_id:
+        return jsonify({"status": "error", "message": "Missing required fields"}), 400
+
+    connection = get_db_connection()
+    # Upsert answer
+    existing = connection.execute("""
+        SELECT id FROM assessment_answers WHERE attempt_id = ? AND question_id = ?
+    """, (attempt_id, question_id)).fetchone()
+
+    if existing:
+        connection.execute("""
+            UPDATE assessment_answers
+            SET student_answer = ?, last_saved_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        """, (answer, existing["id"]))
+    else:
+        connection.execute("""
+            INSERT INTO assessment_answers (attempt_id, question_id, student_id, student_answer)
+            VALUES (?, ?, ?, ?)
+        """, (attempt_id, question_id, student_id, answer))
+
+    connection.commit()
+    connection.close()
+    return jsonify({"status": "success", "saved": True})
+
+@app.route("/api/proctoring/log-event", methods=["POST"])
+@login_required
+def api_proctoring_log():
+    data = request.get_json() or {}
+    attempt_id = data.get("attempt_id")
+    event_type = data.get("event_type", "warning")
+    severity = data.get("severity", "warning")
+    details = data.get("details", "")
+    student_id = session.get("student_id") or "S001"
+
+    if not attempt_id:
+        return jsonify({"status": "error", "message": "Missing attempt_id"}), 400
+
+    connection = get_db_connection()
+    att = connection.execute("SELECT assessment_id FROM assessment_attempts WHERE id = ?", (attempt_id,)).fetchone()
+    assessment_id = att["assessment_id"] if att else 1
+
+    connection.execute("""
+        INSERT INTO proctoring_logs (attempt_id, student_id, assessment_id, event_type, severity, details)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (attempt_id, student_id, assessment_id, event_type, severity, details))
+
+    # Increment attempt flag count
+    connection.execute("""
+        UPDATE assessment_attempts
+        SET proctoring_flag_count = proctoring_flag_count + 1,
+            review_status = CASE WHEN review_status = 'normal' THEN 'flagged' ELSE review_status END
+        WHERE id = ?
+    """, (attempt_id,))
+
+    connection.commit()
+    connection.close()
+    return jsonify({"status": "logged", "event": event_type})
+
+@app.route("/assessments/submit/<int:assessment_id>", methods=["POST"])
+@login_required
+def submit_proctored_assessment(assessment_id):
+    student_id = session.get("student_id") or "S001"
+    attempt_id = request.form.get("attempt_id")
+
+    connection = get_db_connection()
+    assessment = connection.execute("SELECT * FROM assessments WHERE id = ?", (assessment_id,)).fetchone()
+    questions = connection.execute("SELECT * FROM assessment_questions WHERE assessment_id = ?", (assessment_id,)).fetchall()
+
+    total_score = 0.0
+    has_subjective = False
+
+    for q in questions:
+        q_id = q["id"]
+        q_type = q["question_type"]
+        q_marks = float(q["marks"])
+        correct_ans = (q["correct_answer"] or "").strip().upper()
+
+        if q_type == "multiple_select":
+            submitted_opts = request.form.getlist(f"ans_{q_id}[]")
+            submitted_val = ",".join(sorted(submitted_opts))
+        else:
+            submitted_val = request.form.get(f"ans_{q_id}", "").strip()
+
+        # Check correctness for objective types
+        is_correct = 0
+        awarded_marks = 0.0
+
+        if q_type == "subjective":
+            has_subjective = True
+            # Subjective questions remain queued for Admin evaluation
+            is_correct = 0
+            awarded_marks = 0.0
+        elif q_type in ["mcq", "true_false"]:
+            if submitted_val.upper() == correct_ans:
+                is_correct = 1
+                awarded_marks = q_marks
+            elif assessment["negative_marking"] > 0 and submitted_val != "":
+                awarded_marks = -float(assessment["negative_marking"])
+        elif q_type == "multiple_select":
+            submitted_set = set(submitted_val.split(",")) if submitted_val else set()
+            correct_set = set(correct_ans.split(","))
+            if submitted_set == correct_set:
+                is_correct = 1
+                awarded_marks = q_marks
+
+        total_score += max(0.0, awarded_marks)
+
+        # Upsert answer record
+        existing = connection.execute("""
+            SELECT id FROM assessment_answers WHERE attempt_id = ? AND question_id = ?
+        """, (attempt_id, q_id)).fetchone()
+
+        if existing:
+            connection.execute("""
+                UPDATE assessment_answers
+                SET student_answer = ?, is_correct = ?, awarded_marks = ?, max_marks = ?, last_saved_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            """, (submitted_val, is_correct, awarded_marks, q_marks, existing["id"]))
+        else:
+            connection.execute("""
+                INSERT INTO assessment_answers (attempt_id, question_id, student_id, student_answer, is_correct, awarded_marks, max_marks)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (attempt_id, q_id, student_id, submitted_val, is_correct, awarded_marks, q_marks))
+
+    max_score = float(assessment["total_marks"])
+    percentage = (total_score / max_score * 100.0) if max_score > 0 else 0.0
+    passed = 1 if percentage >= float(assessment["passing_marks"]) else 0
+    status = "submitted" if has_subjective else "evaluated"
+
+    connection.execute("""
+        UPDATE assessment_attempts
+        SET submitted_at = CURRENT_TIMESTAMP,
+            score = ?,
+            percentage = ?,
+            passed = ?,
+            status = ?
+        WHERE id = ?
+    """, (round(total_score, 1), round(percentage, 1), passed, status, attempt_id))
+
+    # Update student learning gaps based on examination results
+    topic_name = assessment["topic"]
+    if percentage < 50.0:
+        gap_score = 100.0 - percentage
+        connection.execute("""
+            INSERT OR REPLACE INTO learning_gaps (student_id, topic, learning_gap_score, gap_category, priority)
+            VALUES (?, ?, ?, 'High Gap', 'High')
+        """, (student_id, topic_name, gap_score))
+
+    connection.commit()
+    connection.close()
+
+    flash(f"Examination '{assessment['title']}' submitted successfully! Score: {total_score:.1f}/{max_score}.", "success")
+    return redirect(url_for("assessments_page"))
+
+# ============================================================
+# EVALUATION OF STUDENT ATTEMPTS (ADMIN)
+# ============================================================
+@app.route("/assessments/evaluate/<int:attempt_id>")
+@login_required
+def evaluate_attempt_view(attempt_id):
+    if session.get("role") != "admin":
+        flash("Evaluation console restricted to Academic Administrators.", "error")
+        return redirect(url_for("dashboard"))
+
+    connection = get_db_connection()
+    attempt = connection.execute("SELECT * FROM assessment_attempts WHERE id = ?", (attempt_id,)).fetchone()
+    if not attempt:
+        connection.close()
+        flash("Attempt not found.", "error")
+        return redirect(url_for("assessments_page"))
+
+    assessment = connection.execute("SELECT * FROM assessments WHERE id = ?", (attempt["assessment_id"],)).fetchone()
+    student = connection.execute("SELECT * FROM students WHERE student_id = ?", (attempt["student_id"],)).fetchone()
+
+    q_answers = connection.execute("""
+        SELECT q.*, ans.id as ans_id, ans.student_answer, ans.awarded_marks, ans.is_correct, ans.feedback
+        FROM assessment_questions q
+        LEFT JOIN assessment_answers ans ON ans.question_id = q.id AND ans.attempt_id = ?
+        WHERE q.assessment_id = ?
+        ORDER BY q.id ASC
+    """, (attempt_id, attempt["assessment_id"])).fetchall()
+
+    connection.close()
+    return render_template("evaluate_attempt.html", attempt=attempt, assessment=assessment, student=student, q_answers=q_answers)
+
+@app.route("/assessments/evaluate/submit/<int:attempt_id>", methods=["POST"])
+@login_required
+def submit_attempt_evaluation(attempt_id):
+    if session.get("role") != "admin":
+        flash("Evaluation permissions required.", "error")
+        return redirect(url_for("dashboard"))
+
+    connection = get_db_connection()
+    attempt = connection.execute("SELECT * FROM assessment_attempts WHERE id = ?", (attempt_id,)).fetchone()
+    if not attempt:
+        connection.close()
+        flash("Attempt not found.", "error")
+        return redirect(url_for("assessments_page"))
+
+    assessment = connection.execute("SELECT * FROM assessments WHERE id = ?", (attempt["assessment_id"],)).fetchone()
+    answers = connection.execute("SELECT id FROM assessment_answers WHERE attempt_id = ?", (attempt_id,)).fetchall()
+
+    total_evaluated_score = 0.0
+    for ans in answers:
+        ans_id = ans["id"]
+        awarded = float(request.form.get(f"awarded_marks_{ans_id}", 0.0))
+        feedback = request.form.get(f"feedback_{ans_id}", "").strip()
+        total_evaluated_score += awarded
+
+        connection.execute("""
+            UPDATE assessment_answers
+            SET awarded_marks = ?, feedback = ?
+            WHERE id = ?
+        """, (awarded, feedback, ans_id))
+
+    review_status = request.form.get("review_status", "reviewed")
+    review_notes = request.form.get("review_notes", "").strip()
+
+    max_sc = float(attempt["max_score"])
+    new_pct = (total_evaluated_score / max_sc * 100.0) if max_sc > 0 else 0.0
+    passed = 1 if new_pct >= float(assessment["passing_marks"]) else 0
+
+    connection.execute("""
+        UPDATE assessment_attempts
+        SET score = ?,
+            percentage = ?,
+            passed = ?,
+            status = 'evaluated',
+            review_status = ?,
+            review_notes = ?,
+            evaluated_by = ?,
+            evaluated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+    """, (
+        round(total_evaluated_score, 1),
+        round(new_pct, 1),
+        passed,
+        review_status,
+        review_notes,
+        session.get("username", "Admin"),
+        attempt_id
+    ))
+
+    # Update student average quiz score
+    student_id = attempt["student_id"]
+    avg_row = connection.execute("""
+        SELECT AVG(percentage) as avg_p FROM assessment_attempts WHERE student_id = ?
+    """, (student_id,)).fetchone()
+    if avg_row and avg_row["avg_p"] is not None:
+        connection.execute("""
+            UPDATE students SET average_quiz_score = ? WHERE student_id = ?
+        """, (round(avg_row["avg_p"], 1), student_id))
+
+    connection.commit()
+    connection.close()
+
+    flash(f"Evaluation finalized for attempt #{attempt_id}. Total Score: {total_evaluated_score:.1f}/{max_sc}.", "success")
+    return redirect(url_for("assessment_detail", assessment_id=attempt["assessment_id"]))
+
+# ============================================================
+# PROCTORING REVIEW DASHBOARD (ADMIN)
+# ============================================================
+@app.route("/proctoring-review")
+@login_required
+def proctoring_review_page():
+    if session.get("role") != "admin":
+        flash("Proctoring security review restricted to Academic Administrators.", "error")
+        return redirect(url_for("dashboard"))
+
+    connection = get_db_connection()
+    attempts = connection.execute("""
+        SELECT att.*, a.title as assessment_title, s.name as student_name
+        FROM assessment_attempts att
+        JOIN assessments a ON a.id = att.assessment_id
+        LEFT JOIN students s ON s.student_id = att.student_id
+        ORDER BY att.id DESC
+    """).fetchall()
+
+    proctoring_logs = connection.execute("""
+        SELECT l.*, a.title as assessment_title
+        FROM proctoring_logs l
+        JOIN assessments a ON a.id = l.assessment_id
+        ORDER BY l.id DESC LIMIT 100
+    """).fetchall()
+
+    total_attempts = len(attempts)
+    flagged_attempts = sum(1 for a in attempts if a["proctoring_flag_count"] > 0)
+    clean_attempts = total_attempts - flagged_attempts
+
+    connection.close()
+    return render_template(
+        "proctoring_review.html",
+        attempts=attempts,
+        proctoring_logs=proctoring_logs,
+        total_attempts=total_attempts,
+        flagged_attempts=flagged_attempts,
+        clean_attempts=clean_attempts
+    )
+
+# ============================================================
+# YOUTUBE LEARNING RESOURCES (ADMIN & STUDENT)
+# ============================================================
+@app.route("/youtube-resources")
+@login_required
+def youtube_resources_page():
+    connection = get_db_connection()
+    role = session.get("role")
+    student_id = session.get("student_id") or "S001"
+
+    if role == "student":
+        # Get student's weak topics from actual gaps
+        weak_topics = connection.execute("""
+            SELECT topic FROM learning_gaps WHERE student_id = ? AND learning_gap_score >= 30.0
+        """, (student_id,)).fetchall()
+        weak_topic_names = [w["topic"] for w in weak_topics]
+
+        if weak_topic_names:
+            placeholders = ",".join("?" for _ in weak_topic_names)
+            resources = connection.execute(f"""
+                SELECT * FROM youtube_resources
+                WHERE topic IN ({placeholders}) OR assigned_to_student_id = ? OR assigned_to_student_id IS NULL OR assigned_to_student_id = ''
+                ORDER BY id DESC
+            """, (*weak_topic_names, student_id)).fetchall()
+        else:
+            resources = connection.execute("""
+                SELECT * FROM youtube_resources
+                WHERE assigned_to_student_id = ? OR assigned_to_student_id IS NULL OR assigned_to_student_id = ''
+                ORDER BY id DESC
+            """, (student_id,)).fetchall()
+    else:
+        resources = connection.execute("SELECT * FROM youtube_resources ORDER BY id DESC").fetchall()
+
+    topics = connection.execute("SELECT topic_name FROM topics ORDER BY topic_name").fetchall()
+    connection.close()
+
+    return render_template("youtube_resources.html", resources=resources, topics=topics)
+
+@app.route("/youtube-resources/add", methods=["POST"])
+@login_required
+def add_youtube_resource():
+    if session.get("role") != "admin":
+        flash("Administrative credentials required to manage learning resources.", "error")
+        return redirect(url_for("youtube_resources_page"))
+
+    title = request.form.get("title", "").strip()
+    youtube_url = request.form.get("youtube_url", "").strip()
+    subject = request.form.get("subject", "").strip()
+    topic = request.form.get("topic", "").strip()
+    difficulty_level = request.form.get("difficulty_level", "Intermediate")
+    assigned_to = request.form.get("assigned_to_student_id", "").strip() or None
+    description = request.form.get("description", "").strip()
+    learning_objective = request.form.get("learning_objective", "").strip()
+
+    if not title or not youtube_url or not topic:
+        flash("Title, YouTube URL, and Topic tag are required.", "error")
+        return redirect(url_for("youtube_resources_page"))
+
+    # Extract YouTube ID
+    import re
+    match = re.search(r"(?:v=|\/)([0-9A-Za-z_-]{11}).*", youtube_url)
+    video_id = match.group(1) if match else ""
+    thumbnail_url = f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg" if video_id else ""
+
+    connection = get_db_connection()
+    connection.execute("""
+        INSERT INTO youtube_resources (
+            title, youtube_url, video_id, subject, topic, description,
+            difficulty_level, learning_objective, thumbnail_url,
+            assigned_to_student_id, created_by_admin
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        title, youtube_url, video_id, subject, topic, description,
+        difficulty_level, learning_objective, thumbnail_url,
+        assigned_to, session.get("username", "Admin")
+    ))
+    connection.commit()
+    connection.close()
+
+    flash(f"YouTube resource '{title}' added to topic '{topic}'.", "success")
+    return redirect(url_for("youtube_resources_page"))
+
+@app.route("/youtube-resources/delete/<int:resource_id>", methods=["POST"])
+@login_required
+def delete_youtube_resource(resource_id):
+    if session.get("role") != "admin":
+        flash("Unauthorized deletion.", "error")
+        return redirect(url_for("youtube_resources_page"))
+
+    connection = get_db_connection()
+    connection.execute("DELETE FROM youtube_resources WHERE id = ?", (resource_id,))
+    connection.commit()
+    connection.close()
+
+    flash("YouTube learning resource removed.", "success")
+    return redirect(url_for("youtube_resources_page"))
 
 # ============================================================
 # RUN SERVER
