@@ -129,6 +129,13 @@ def test_all_routes():
         "/interventions",
         "/student/S001",
         "/settings",
+        "/theory",
+        "/theory/SQL%20Joins",
+        "/video-learning",
+        "/academic-tracker",
+        "/heatmap",
+        "/future-predictions",
+        "/admin/export-students-csv",
         "/api/curriculum-roadmap/SQL%20Joins",
         "/reports/model_comparison.csv",
     ]
@@ -156,6 +163,14 @@ def test_all_routes():
         "/topics",
         "/youtube-resources",
         "/settings",
+        "/theory",
+        "/theory/SQL%20Joins",
+        "/video-learning",
+        "/academic-tracker",
+        "/heatmap",
+        "/learning-path",
+        "/future-predictions",
+        "/student/download-report/S001",
     ]
 
     for endpoint in student_endpoints:
@@ -200,6 +215,41 @@ def test_all_routes():
     print("[TEST PASSED] REST API endpoints /api/predict-risk and /api/predict-topic-gap verified with 200 OK.")
 
 
+def test_new_student_risk_status():
+    from app import get_db_connection, evaluate_student_risk_status
+    import uuid
+    client = app.test_client()
+    test_uid = f"STEST_{uuid.uuid4().hex[:6].upper()}"
+    test_user = f"newuser_{uuid.uuid4().hex[:6]}"
+
+    # Register new user
+    r = client.post("/register", data={
+        "username": test_user,
+        "email": f"{test_user}@test.edu",
+        "password": "Password123!",
+        "student_id": test_uid
+    }, follow_redirects=True)
+    assert r.status_code == 200
+
+    conn = get_db_connection()
+    st = conn.execute("SELECT * FROM students WHERE student_id = ?", (test_uid,)).fetchone()
+    assert st is not None, "New student record not created"
+    assert st["overall_risk"] == "Assessment Pending", f"Expected Assessment Pending, got {st['overall_risk']}"
+    assert st["completed_assessments_count"] == 0, f"Expected 0 completed assessments, got {st['completed_assessments_count']}"
+
+    # Evaluate risk without assessments
+    status, conf = evaluate_student_risk_status(test_uid, conn)
+    assert status == "Assessment Pending"
+    assert conf == 0.0
+
+    # Cleanup test record
+    conn.execute("DELETE FROM students WHERE student_id = ?", (test_uid,))
+    conn.execute("DELETE FROM users WHERE student_id = ?", (test_uid,))
+    conn.commit()
+    conn.close()
+    print("[TEST PASSED] New user registration correctly defaults to Assessment Pending (Zero activity bias).")
+
+
 if __name__ == "__main__":
     print("=" * 60)
     print("RUNNING PRODUCTION VERIFICATION TEST SUITE")
@@ -208,6 +258,7 @@ if __name__ == "__main__":
     test_template_syntax()
     test_ml_inference()
     test_all_routes()
+    test_new_student_risk_status()
     print("\n" + "=" * 60)
     print("ALL PRODUCTION VALIDATION TESTS PASSED SUCCESSFULLY!")
     print("=" * 60)

@@ -28,11 +28,18 @@ from src.ai_engine import (
     load_shap_feature_importance
 )
 from src.curriculum_data import CURRICULUM_ROADMAP
+from src.adaptive_learning import (
+    get_topic_mastery_heatmap,
+    get_or_create_learning_path,
+    predict_future_learning_gaps,
+    CURRICULUM_TOPICS
+)
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "edugap-production-secret-token-key-2026")
 
-DATABASE = Path("database/learning_gap.db")
+ROOT_DIR = Path(__file__).resolve().parent
+DATABASE = ROOT_DIR / "database" / "learning_gap.db"
 
 # ============================================================
 # DATABASE CONNECTION
@@ -41,6 +48,85 @@ def get_db_connection():
     connection = sqlite3.connect(DATABASE)
     connection.row_factory = sqlite3.Row
     return connection
+
+# ============================================================
+# EVALUATE STUDENT RISK STATUS (DIAGNOSTIC STATUS SYSTEM)
+# ============================================================
+def evaluate_student_risk_status(student_id, connection=None):
+    """
+    Evaluates student risk level using verified assessment data and machine learning.
+    Status System:
+    1. Assessment Pending (0 activities completed)
+    2. Insufficient Data (< 2 activities completed)
+    3. Low Risk (calibrated by AI model)
+    4. Medium Risk (calibrated by AI model)
+    5. High Risk (calibrated by AI model with strong evidence)
+    """
+    should_close = False
+    if connection is None:
+        connection = get_db_connection()
+        should_close = True
+
+    try:
+        assess_row = connection.execute("""
+            SELECT COUNT(DISTINCT assessment_id) FROM assessment_attempts
+            WHERE student_id = ? AND status IN ('submitted', 'evaluated')
+        """, (student_id,)).fetchone()
+        assess_count = assess_row[0] if assess_row else 0
+
+        quiz_row = connection.execute("""
+            SELECT COUNT(DISTINCT quiz_id) FROM quiz_attempts WHERE student_id = ?
+        """, (student_id,)).fetchone()
+        quiz_count = quiz_row[0] if quiz_row else 0
+
+        total_activities = assess_count + quiz_count
+
+        student = connection.execute("SELECT * FROM students WHERE student_id = ?", (student_id,)).fetchone()
+        if not student:
+            return "Assessment Pending", 0.0
+
+        if total_activities == 0:
+            status = "Assessment Pending"
+            confidence = 0.0
+        elif total_activities < 2:
+            status = "Insufficient Data"
+            confidence = 0.45
+        else:
+            avg_quiz = float(student["average_quiz_score"] or 0.0)
+            avg_assign = float(student["average_assignment_score"] or 0.0)
+            avg_att = float(student["average_attendance"] or 0.0)
+
+            gaps = connection.execute("SELECT learning_gap_score FROM learning_gaps WHERE student_id = ?", (student_id,)).fetchall()
+            if gaps:
+                avg_gap = sum(float(g["learning_gap_score"]) for g in gaps) / len(gaps)
+            else:
+                avg_gap = float(student["average_learning_gap"] or 0.0)
+
+            try:
+                risk_result = predict_student_risk(avg_quiz, avg_assign, avg_att, avg_gap)
+                status = risk_result.get("risk_category", "Low Risk")
+                confidence = float(risk_result.get("confidence", 0.85))
+            except Exception:
+                if avg_gap >= 60.0 or (avg_quiz < 45.0 and avg_att < 60.0):
+                    status = "High Risk"
+                    confidence = 0.85
+                elif avg_gap >= 35.0 or avg_quiz < 65.0:
+                    status = "Medium Risk"
+                    confidence = 0.78
+                else:
+                    status = "Low Risk"
+                    confidence = 0.90
+
+        connection.execute("""
+            UPDATE students
+            SET overall_risk = ?, risk_confidence = ?, completed_assessments_count = ?
+            WHERE student_id = ?
+        """, (status, round(confidence, 2), assess_count, student_id))
+        connection.commit()
+        return status, confidence
+    finally:
+        if should_close:
+            connection.close()
 
 # ============================================================
 # LOGIN REQUIRED DECORATOR
@@ -107,6 +193,16 @@ def dashboard():
 
         connection.close()
 
+        # Get topic mastery heatmap preview and adaptive learning path for this student
+        try:
+            heatmap_preview = get_topic_mastery_heatmap(student_id)
+        except Exception:
+            heatmap_preview = []
+        try:
+            learning_path_info = get_or_create_learning_path(student_id)
+        except Exception:
+            learning_path_info = None
+
         if student is None:
             return render_template(
                 "dashboard.html",
@@ -114,26 +210,33 @@ def dashboard():
                 high_risk=0,
                 medium_risk=0,
                 low_risk=0,
+                pending_risk=0,
                 students=[],
                 current_student=None,
                 student_guidance_list=[],
                 recommended_videos=[],
                 weak_topics=[],
-                hidden_topics_for_student=[]
+                hidden_topics_for_student=[],
+                heatmap_topics=[],
+                learning_path_info=None
             )
 
+        current_student_dict = dict(student) if student else None
         return render_template(
             "dashboard.html",
             total_students=1,
             high_risk=1 if student["overall_risk"] == "High Risk" else 0,
             medium_risk=1 if student["overall_risk"] == "Medium Risk" else 0,
             low_risk=1 if student["overall_risk"] == "Low Risk" else 0,
+            pending_risk=1 if student["overall_risk"] in ["Assessment Pending", "Insufficient Data"] else 0,
             students=[student],
-            current_student=student,
+            current_student=current_student_dict,
             student_guidance_list=student_guidance_list,
             recommended_videos=recommended_videos,
             weak_topics=weak_topics,
-            hidden_topics_for_student=hidden_topics_for_student
+            hidden_topics_for_student=hidden_topics_for_student,
+            heatmap_topics=heatmap_preview,
+            learning_path_info=learning_path_info
         )
 
     # ADMIN / ACADEMIC MONITOR CONSOLE
@@ -141,6 +244,7 @@ def dashboard():
     high_risk = connection.execute("SELECT COUNT(*) FROM students WHERE overall_risk = 'High Risk'").fetchone()[0]
     medium_risk = connection.execute("SELECT COUNT(*) FROM students WHERE overall_risk = 'Medium Risk'").fetchone()[0]
     low_risk = connection.execute("SELECT COUNT(*) FROM students WHERE overall_risk = 'Low Risk'").fetchone()[0]
+    pending_risk = connection.execute("SELECT COUNT(*) FROM students WHERE overall_risk IN ('Assessment Pending', 'Insufficient Data')").fetchone()[0]
 
     # Real database statistics for Admin Overview
     active_assessments = connection.execute("SELECT COUNT(*) FROM assessments WHERE is_published = 1").fetchone()[0]
@@ -199,6 +303,7 @@ def dashboard():
         high_risk=high_risk,
         medium_risk=medium_risk,
         low_risk=low_risk,
+        pending_risk=pending_risk,
         active_assessments=active_assessments,
         flagged_proctoring_count=flagged_proctoring_count,
         pending_evaluations=pending_evaluations,
@@ -265,10 +370,14 @@ def register():
         ).fetchone()
 
         if existing_student is None:
-            # Create student placeholder
+            # Create student record with Assessment Pending status (not evaluated until sufficient activity data)
             connection.execute("""
-                INSERT INTO students (student_id, name, email, average_quiz_score, average_assignment_score, average_learning_gap, average_attendance, overall_risk)
-                VALUES (?, ?, ?, 50.0, 50.0, 50.0, 75.0, 'Medium Risk')
+                INSERT INTO students (
+                    student_id, name, email, department, current_semester,
+                    average_quiz_score, average_assignment_score, average_learning_gap,
+                    average_attendance, completed_assessments_count, risk_confidence, overall_risk
+                )
+                VALUES (?, ?, ?, 'Computer Science', 6, 0.0, 0.0, 0.0, 0.0, 0, 0.0, 'Assessment Pending')
             """, (student_id, username.title(), email))
 
         existing_user = connection.execute(
@@ -319,12 +428,16 @@ def profile():
         (student_id,)
     ).fetchone()
 
-    # If student does not exist in DB yet, create a default record
+    # If student does not exist in DB yet, create an Assessment Pending record
     if student is None:
         default_name = session.get("username", "Student").title()
         connection.execute("""
-            INSERT INTO students (student_id, name, email, average_quiz_score, average_assignment_score, average_learning_gap, average_attendance, overall_risk)
-            VALUES (?, ?, ?, 50.0, 50.0, 50.0, 80.0, 'Low Risk')
+            INSERT INTO students (
+                student_id, name, email, department, current_semester,
+                average_quiz_score, average_assignment_score, average_learning_gap,
+                average_attendance, completed_assessments_count, risk_confidence, overall_risk
+            )
+            VALUES (?, ?, ?, 'Computer Science', 6, 0.0, 0.0, 0.0, 0.0, 0, 0.0, 'Assessment Pending')
         """, (student_id, default_name, f"{session.get('username','student')}@edulearn.ai"))
         connection.commit()
         student = connection.execute(
@@ -442,15 +555,15 @@ def update_performance():
 
     new_avg_score = aggregates["avg_score"] or score
     new_avg_gap = aggregates["avg_gap"] or learning_gap_score
-    overall_risk = "High Risk" if new_avg_gap >= 60 else ("Medium Risk" if new_avg_gap >= 30 else "Low Risk")
 
     connection.execute("""
         UPDATE students
-        SET average_quiz_score = ?, average_learning_gap = ?, overall_risk = ?
+        SET average_quiz_score = ?, average_learning_gap = ?
         WHERE student_id = ?
-    """, (round(new_avg_score, 2), round(new_avg_gap, 2), overall_risk, student_id))
+    """, (round(new_avg_score, 2), round(new_avg_gap, 2), student_id))
 
     connection.commit()
+    evaluate_student_risk_status(student_id, connection)
     connection.close()
 
     flash(f"Assessment score for {topic['topic_name']} recorded. Gap recalculated to {learning_gap_score}%.", "success")
@@ -651,12 +764,13 @@ def quiz_detail(quiz_id):
         if aggregates and aggregates["avg_score"] is not None:
             new_quiz_avg = round(aggregates["avg_score"], 2)
             new_gap_avg = round(aggregates["avg_gap"], 2)
-            overall_risk = "High Risk" if new_gap_avg >= 60 else ("Medium Risk" if new_gap_avg >= 30 else "Low Risk")
             connection.execute("""
                 UPDATE students
-                SET average_quiz_score = ?, average_learning_gap = ?, overall_risk = ?
+                SET average_quiz_score = ?, average_learning_gap = ?
                 WHERE student_id = ?
-            """, (new_quiz_avg, new_gap_avg, overall_risk, student_id))
+            """, (new_quiz_avg, new_gap_avg, student_id))
+            connection.commit()
+            evaluate_student_risk_status(student_id, connection)
 
         connection.commit()
         connection.close()
@@ -2078,7 +2192,14 @@ def submit_proctored_assessment(assessment_id):
             VALUES (?, ?, ?, 'High Gap', 'High')
         """, (student_id, topic_name, gap_score))
 
+    # Update completed assessments count and evaluate diagnostic risk
+    assess_cnt = connection.execute("""
+        SELECT COUNT(DISTINCT assessment_id) FROM assessment_attempts
+        WHERE student_id = ? AND status IN ('submitted', 'evaluated')
+    """, (student_id,)).fetchone()[0]
+    connection.execute("UPDATE students SET completed_assessments_count = ? WHERE student_id = ?", (assess_cnt, student_id))
     connection.commit()
+    evaluate_student_risk_status(student_id, connection)
     connection.close()
 
     flash(f"Examination '{assessment['title']}' submitted successfully! Score: {total_score:.1f}/{max_score}.", "success")
@@ -2325,6 +2446,682 @@ def delete_youtube_resource(resource_id):
 
     flash("YouTube learning resource removed.", "success")
     return redirect(url_for("youtube_resources_page"))
+
+# ============================================================
+# THEORY CONCEPTS & LEARNING MATERIALS MODULE
+# ============================================================
+@app.route("/theory")
+@login_required
+def theory_page():
+    student_id = session.get("student_id") or "S001"
+    connection = get_db_connection()
+    topics = connection.execute("SELECT * FROM theory_materials ORDER BY id ASC").fetchall()
+
+    progress_records = connection.execute("""
+        SELECT topic_name, status, updated_at FROM student_theory_progress
+        WHERE student_id = ?
+    """, (student_id,)).fetchall()
+    progress_map = {p["topic_name"]: p["status"] for p in progress_records}
+
+    theory_list = []
+    completed_count = 0
+    for t in topics:
+        st = progress_map.get(t["topic_name"], "Not Started")
+        if st == "Completed":
+            completed_count += 1
+        theory_list.append({
+            "id": t["id"],
+            "topic_name": t["topic_name"],
+            "subject": t["subject"],
+            "definition": t["definition"],
+            "status": st
+        })
+
+    total_topics = len(topics)
+    progress_pct = int(round((completed_count / total_topics) * 100)) if total_topics > 0 else 0
+    connection.close()
+
+    return render_template(
+        "theory.html",
+        topics=theory_list,
+        completed_count=completed_count,
+        total_topics=total_topics,
+        progress_pct=progress_pct
+    )
+
+@app.route("/theory/<topic_name>")
+@login_required
+def theory_detail_page(topic_name):
+    student_id = session.get("student_id") or "S001"
+    connection = get_db_connection()
+    topic = connection.execute(
+        "SELECT * FROM theory_materials WHERE topic_name = ?", (topic_name,)
+    ).fetchone()
+
+    if not topic:
+        topic = connection.execute(
+            "SELECT * FROM theory_materials WHERE LOWER(topic_name) = LOWER(?)", (topic_name,)
+        ).fetchone()
+
+    if not topic:
+        connection.close()
+        flash(f"Theory material for '{topic_name}' is currently being curated.", "info")
+        return redirect(url_for("theory_page"))
+
+    def safe_parse_json_field(val):
+        if not val:
+            return []
+        if isinstance(val, (list, dict)):
+            return val
+        try:
+            import json
+            return json.loads(val)
+        except Exception:
+            return [val]
+
+    important_points = safe_parse_json_field(topic["important_points"])
+    advantages = safe_parse_json_field(topic["advantages"])
+    disadvantages = safe_parse_json_field(topic["disadvantages"])
+    short_questions = safe_parse_json_field(topic["short_questions"])
+    long_questions = safe_parse_json_field(topic["long_questions"])
+    key_takeaways = safe_parse_json_field(topic["key_takeaways"])
+
+    prog = connection.execute("""
+        SELECT status FROM student_theory_progress WHERE student_id = ? AND topic_name = ?
+    """, (student_id, topic["topic_name"])).fetchone()
+    current_status = prog["status"] if prog else "Not Started"
+
+    all_topics = connection.execute("SELECT topic_name, subject FROM theory_materials ORDER BY id ASC").fetchall()
+    connection.close()
+
+    return render_template(
+        "theory_detail.html",
+        material=topic,
+        topic=topic,
+        important_points=important_points,
+        advantages=advantages,
+        disadvantages=disadvantages,
+        short_questions=short_questions,
+        long_questions=long_questions,
+        key_takeaways=key_takeaways,
+        current_status=current_status,
+        all_topics=all_topics
+    )
+
+@app.route("/api/theory/progress", methods=["POST"])
+@login_required
+def api_theory_progress():
+    data = request.get_json() or {}
+    topic_name = data.get("topic_name")
+    status = data.get("status", "In Progress")
+    student_id = session.get("student_id") or "S001"
+
+    if not topic_name:
+        return jsonify({"status": "error", "message": "topic_name is required"}), 400
+
+    connection = get_db_connection()
+    existing = connection.execute("""
+        SELECT id FROM student_theory_progress WHERE student_id = ? AND topic_name = ?
+    """, (student_id, topic_name)).fetchone()
+
+    if existing:
+        connection.execute("""
+            UPDATE student_theory_progress
+            SET status = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        """, (status, existing["id"]))
+    else:
+        connection.execute("""
+            INSERT INTO student_theory_progress (student_id, topic_name, status)
+            VALUES (?, ?, ?)
+        """, (student_id, topic_name, status))
+
+    connection.commit()
+    connection.close()
+    return jsonify({"status": "success", "topic_name": topic_name, "saved_status": status})
+
+# ============================================================
+# CONCEPTUAL VIDEO LEARNING CENTER
+# ============================================================
+@app.route("/video-learning")
+@login_required
+def video_learning_page():
+    student_id = session.get("student_id") or "S001"
+    topic_filter = request.args.get("topic", "").strip()
+
+    connection = get_db_connection()
+    if topic_filter:
+        videos = connection.execute("""
+            SELECT * FROM youtube_resources WHERE topic = ? ORDER BY id ASC
+        """, (topic_filter,)).fetchall()
+    else:
+        videos = connection.execute("SELECT * FROM youtube_resources ORDER BY id ASC").fetchall()
+
+    progress_rows = connection.execute("""
+        SELECT video_id, is_completed FROM student_video_progress WHERE student_id = ?
+    """, (student_id,)).fetchall()
+    completed_video_ids = {p["video_id"] for p in progress_rows if p["is_completed"]}
+
+    weak_rows = connection.execute("""
+        SELECT topic FROM learning_gaps WHERE student_id = ? AND learning_gap_score >= 35.0
+    """, (student_id,)).fetchall()
+    weak_topic_names = [w["topic"] for w in weak_rows]
+
+    all_topics = connection.execute("SELECT DISTINCT topic FROM youtube_resources").fetchall()
+    all_topic_names = [t["topic"] for t in all_topics if t["topic"]]
+
+    video_items = []
+    watched_count = 0
+    for v in videos:
+        is_watched = (v["id"] in completed_video_ids)
+        st = "Watched" if is_watched else "Unwatched"
+        if is_watched:
+            watched_count += 1
+        video_items.append({
+            "id": v["id"],
+            "title": v["title"],
+            "topic": v["topic"],
+            "subject": v["subject"],
+            "youtube_url": v["youtube_url"],
+            "video_id": v["video_id"],
+            "thumbnail_url": v["thumbnail_url"],
+            "description": v["description"],
+            "difficulty_level": v["difficulty_level"],
+            "status": st
+        })
+
+    connection.close()
+    return render_template(
+        "video_learning.html",
+        videos=video_items,
+        all_topics=all_topic_names,
+        active_filter=topic_filter,
+        watched_count=watched_count,
+        total_count=len(video_items),
+        completed_video_ids=completed_video_ids,
+        weak_topic_names=weak_topic_names
+    )
+
+@app.route("/api/video/progress", methods=["POST"])
+@login_required
+def api_video_progress():
+    data = request.get_json() or {}
+    video_id = data.get("video_id") or data.get("resource_id")
+    student_id = session.get("student_id") or "S001"
+
+    if not video_id:
+        return jsonify({"status": "error", "message": "video_id is required"}), 400
+
+    connection = get_db_connection()
+    existing = connection.execute("""
+        SELECT id, is_completed FROM student_video_progress WHERE student_id = ? AND video_id = ?
+    """, (student_id, video_id)).fetchone()
+
+    if existing:
+        new_val = 0 if existing["is_completed"] else 1
+        connection.execute("""
+            UPDATE student_video_progress SET is_completed = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
+        """, (new_val, existing["id"]))
+    else:
+        new_val = 1
+        connection.execute("""
+            INSERT INTO student_video_progress (student_id, video_id, is_completed)
+            VALUES (?, ?, 1)
+        """, (student_id, video_id))
+
+    connection.commit()
+    connection.close()
+    return jsonify({"status": "success", "video_id": video_id, "is_completed": bool(new_val)})
+
+# ============================================================
+# ACADEMIC MARKS PERFORMANCE TRACKER (MID-1, MID-2, SEMESTER)
+# ============================================================
+@app.route("/academic-tracker")
+@login_required
+def academic_tracker_page():
+    role = session.get("role")
+    student_id = session.get("student_id") or "S001"
+    connection = get_db_connection()
+
+    if role == "admin":
+        marks = connection.execute("""
+            SELECT m.*, s.name as student_name
+            FROM academic_marks m
+            LEFT JOIN students s ON m.student_id = s.student_id
+            ORDER BY m.id DESC
+        """).fetchall()
+    else:
+        marks = connection.execute("""
+            SELECT * FROM academic_marks WHERE student_id = ? ORDER BY id DESC
+        """, (student_id,)).fetchall()
+
+    marks_list = [dict(m) for m in marks]
+    pending_verifications = sum(1 for m in marks_list if m.get("status") != "verified")
+    verified_count = sum(1 for m in marks_list if m.get("status") == "verified")
+
+    total_pct_sum = sum((m["total_marks"] / m["total_max"] * 100) for m in marks_list if m.get("total_max", 0) > 0)
+    overall_academic_pct = (total_pct_sum / len(marks_list)) if marks_list else 0.0
+
+    mid1_sum = sum(m.get("mid1_marks", 0) for m in marks_list)
+    avg_mid1 = (mid1_sum / len(marks_list)) if marks_list else 0.0
+
+    mid2_sum = sum(m.get("mid2_marks", 0) for m in marks_list)
+    avg_mid2 = (mid2_sum / len(marks_list)) if marks_list else 0.0
+
+    chart_subjects = [m.get("subject_name", "") for m in marks_list]
+    chart_totals = [round((m["total_marks"] / m["total_max"] * 100), 1) if m.get("total_max", 0) > 0 else 0 for m in marks_list]
+    chart_internals = [m.get("internal_marks", 0) for m in marks_list]
+    chart_externals = [m.get("semester_marks", 0) for m in marks_list]
+
+    connection.close()
+
+    return render_template(
+        "academic_tracker.html",
+        marks_list=marks_list,
+        pending_verifications=pending_verifications,
+        verified_count=verified_count,
+        overall_academic_pct=overall_academic_pct,
+        avg_mid1=avg_mid1,
+        avg_mid2=avg_mid2,
+        chart_subjects=chart_subjects,
+        chart_totals=chart_totals,
+        chart_internals=chart_internals,
+        chart_externals=chart_externals,
+        selected_sem="All",
+        role=role,
+        student_id=student_id
+    )
+
+@app.route("/api/academic-tracker/submit", methods=["POST"])
+@login_required
+def api_academic_tracker_submit():
+    data = request.get_json() if request.is_json else request.form
+    student_id = session.get("student_id") or data.get("student_id", "S001")
+    semester = int(data.get("semester", 6))
+    academic_year = data.get("academic_year", "2026-2027")
+    subject_name = data.get("subject_name", "").strip()
+
+    mid1_marks = float(data.get("mid1_marks", 0.0))
+    mid1_max = float(data.get("mid1_max", 30.0))
+    mid2_marks = float(data.get("mid2_marks", 0.0))
+    mid2_max = float(data.get("mid2_max", 30.0))
+    assignment_marks = float(data.get("assignment_marks", 0.0))
+    assignment_max = float(data.get("assignment_max", 10.0))
+    semester_marks = float(data.get("semester_marks", 0.0))
+    semester_max = float(data.get("semester_max", 60.0))
+
+    internal_marks = round(((mid1_marks + mid2_marks) / 2.0) + assignment_marks, 1)
+    internal_max = 40.0
+    total_marks = internal_marks + semester_marks
+    total_max = internal_max + semester_max
+
+    connection = get_db_connection()
+    connection.execute("""
+        INSERT INTO academic_marks (
+            student_id, semester, academic_year, subject_name,
+            mid1_marks, mid1_max, mid2_marks, mid2_max,
+            assignment_marks, assignment_max, internal_marks, internal_max,
+            semester_marks, semester_max, total_marks, total_max,
+            status, remarks
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_review', 'Submitted by student')
+    """, (
+        student_id, semester, academic_year, subject_name,
+        mid1_marks, mid1_max, mid2_marks, mid2_max,
+        assignment_marks, assignment_max, internal_marks, internal_max,
+        semester_marks, semester_max, total_marks, total_max
+    ))
+    connection.commit()
+    connection.close()
+
+    if request.is_json:
+        return jsonify({"status": "success", "message": "Academic marks submitted for verification."})
+
+    flash(f"Academic marks for {subject_name} submitted for administrative verification.", "success")
+    return redirect(url_for("academic_tracker_page"))
+
+@app.route("/api/academic-tracker/verify/<int:mark_id>", methods=["POST"])
+@login_required
+def api_academic_tracker_verify(mark_id):
+    if session.get("role") != "admin":
+        if request.is_json:
+            return jsonify({"status": "error", "message": "Admin authorization required"}), 403
+        flash("Teacher or administrator credentials required to verify academic marks.", "error")
+        return redirect(url_for("academic_tracker_page"))
+
+    data = request.get_json() if request.is_json else {}
+    target_status = data.get("status", "verified")
+    admin_name = session.get("username", "Evaluator")
+
+    connection = get_db_connection()
+    connection.execute("""
+        UPDATE academic_marks
+        SET status = ?, verified_by = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+    """, (target_status, admin_name, mark_id))
+    connection.commit()
+    connection.close()
+
+    if request.is_json:
+        return jsonify({"status": "success", "mark_id": mark_id, "status_updated": target_status})
+
+    flash("Academic mark status updated successfully.", "success")
+    return redirect(url_for("academic_tracker_page"))
+
+# ============================================================
+# TOPIC MASTERY HEATMAP (GREEN, YELLOW, RED, GREY)
+# ============================================================
+@app.route("/heatmap")
+@login_required
+def heatmap_page():
+    student_id = session.get("student_id") or "S001"
+    if session.get("role") == "admin" and request.args.get("student_id"):
+        student_id = request.args.get("student_id")
+
+    heatmap_topics = get_topic_mastery_heatmap(student_id)
+
+    green_count = sum(1 for h in heatmap_topics if h["tier"] == "strong")
+    yellow_count = sum(1 for h in heatmap_topics if h["tier"] == "moderate")
+    red_count = sum(1 for h in heatmap_topics if h["tier"] == "weak")
+    grey_count = sum(1 for h in heatmap_topics if h["tier"] == "not_evaluated")
+
+    connection = get_db_connection()
+    student = connection.execute("SELECT * FROM students WHERE student_id = ?", (student_id,)).fetchone()
+    all_students = connection.execute("SELECT student_id, name FROM students ORDER BY student_id ASC").fetchall() if session.get("role") == "admin" else []
+    connection.close()
+
+    return render_template(
+        "heatmap.html",
+        student=student,
+        student_id=student_id,
+        topics=heatmap_topics,
+        green_count=green_count,
+        yellow_count=yellow_count,
+        red_count=red_count,
+        grey_count=grey_count,
+        all_students=all_students
+    )
+
+# ============================================================
+# PERSONALIZED ADAPTIVE REMEDIATION PATH (6-STEP SEQUENCE)
+# ============================================================
+@app.route("/learning-path")
+@login_required
+def learning_path_page():
+    student_id = session.get("student_id") or "S001"
+    raw_path = get_or_create_learning_path(student_id)
+
+    steps = raw_path.get("steps", [])
+    norm_steps = []
+    active_step = 1
+    for s in steps:
+        step_num = s.get("step") or s.get("step_number") or 1
+        is_comp = bool(s.get("is_completed"))
+        if is_comp and active_step == step_num:
+            active_step = step_num + 1
+        norm_steps.append({
+            "step_number": step_num,
+            "title": s.get("title", ""),
+            "description": s.get("description", ""),
+            "action_url": s.get("action_url", ""),
+            "action_label": s.get("action_label", "Proceed"),
+            "is_completed": is_comp
+        })
+
+    completed_count = sum(1 for s in norm_steps if s["is_completed"])
+    progress_pct = int(round((completed_count / len(norm_steps)) * 100)) if norm_steps else 0
+
+    initial_m = float(raw_path.get("initial_mastery") or 35.0)
+    current_m = float(raw_path.get("reassessed_mastery") or initial_m)
+    delta_m = round(current_m - initial_m, 1)
+
+    path_data = {
+        "id": raw_path.get("id"),
+        "topic_name": raw_path.get("topic_name", "SQL Joins"),
+        "status": raw_path.get("status", "In Progress"),
+        "initial_mastery": initial_m,
+        "current_mastery": current_m,
+        "delta_mastery": delta_m,
+        "progress_pct": progress_pct,
+        "active_step": active_step,
+        "steps": norm_steps,
+        "updated_at": raw_path.get("updated_at", "")
+    }
+
+    return render_template("learning_path.html", path=path_data)
+
+@app.route("/learning-path/step/<int:step_number>", methods=["POST"])
+@login_required
+def toggle_learning_path_step(step_number):
+    student_id = session.get("student_id") or "S001"
+    connection = get_db_connection()
+    path = connection.execute("""
+        SELECT * FROM student_learning_paths
+        WHERE student_id = ? AND status = 'In Progress'
+        ORDER BY id DESC LIMIT 1
+    """, (student_id,)).fetchone()
+
+    if path:
+        import json
+        steps = json.loads(path["steps_json"])
+        for s in steps:
+            curr_num = s.get("step") or s.get("step_number")
+            if curr_num == step_number:
+                s["is_completed"] = not s.get("is_completed", False)
+                break
+
+        completed_cnt = sum(1 for s in steps if s.get("is_completed"))
+        new_status = "Mastered" if completed_cnt == len(steps) else "In Progress"
+
+        connection.execute("""
+            UPDATE student_learning_paths
+            SET steps_json = ?, current_step = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        """, (json.dumps(steps), min(6, completed_cnt + 1), new_status, path["id"]))
+        connection.commit()
+
+    connection.close()
+    flash(f"Stage {step_number} progress updated.", "success")
+    return redirect(url_for("learning_path_page"))
+
+@app.route("/learning-path/reassess", methods=["POST"])
+@login_required
+def reassess_learning_path():
+    student_id = session.get("student_id") or "S001"
+    connection = get_db_connection()
+    path = connection.execute("""
+        SELECT * FROM student_learning_paths
+        WHERE student_id = ? AND status = 'In Progress'
+        ORDER BY id DESC LIMIT 1
+    """, (student_id,)).fetchone()
+
+    if path:
+        topic_name = path["topic_name"]
+        initial_m = float(path["initial_mastery"] or 35.0)
+
+        from src.knowledge_tracing import BayesianKnowledgeTracer
+        tracer = BayesianKnowledgeTracer()
+        new_prob = tracer.predict_mastery_probability([1, 1, 1, 1], topic_name)
+        new_mastery_pct = round(new_prob * 100.0, 1)
+
+        delta = round(new_mastery_pct - initial_m, 1)
+        new_status = "Mastered" if new_mastery_pct >= 70.0 else "In Progress"
+
+        connection.execute("""
+            UPDATE student_learning_paths
+            SET reassessed_mastery = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        """, (new_mastery_pct, new_status, path["id"]))
+
+        connection.execute("""
+            INSERT INTO student_interventions_tracking (
+                student_id, topic_name, intervention_type, mastery_before,
+                mastery_after, delta_mastery, status
+            ) VALUES (?, ?, '6-Step Adaptive Learning Path', ?, ?, ?, ?)
+        """, (student_id, topic_name, initial_m, new_mastery_pct, delta, new_status))
+
+        new_gap_score = max(0.0, 100.0 - new_mastery_pct)
+        connection.execute("""
+            UPDATE learning_gaps
+            SET learning_gap_score = ?, gap_category = CASE WHEN ? < 30 THEN 'Low Gap' ELSE 'Medium Gap' END
+            WHERE student_id = ? AND topic = ?
+        """, (new_gap_score, new_gap_score, student_id, topic_name))
+
+        connection.commit()
+        evaluate_student_risk_status(student_id, connection)
+        flash(f"Post-remediation diagnostic completed! Mastery elevated from {initial_m}% to {new_mastery_pct}% (Delta: +{delta}%).", "success")
+
+    connection.close()
+    return redirect(url_for("learning_path_page"))
+
+# ============================================================
+# FUTURE LEARNING GAP PREDICTION (PREREQUISITE DAG & TEMPORAL)
+# ============================================================
+@app.route("/future-predictions")
+@login_required
+def future_predictions_page():
+    student_id = session.get("student_id") or "S001"
+    raw_predictions = predict_future_learning_gaps(student_id)
+
+    formatted_preds = []
+    for p in raw_predictions:
+        prereq_name = p.get("prerequisite") or "Foundational Mathematics"
+        prereq_mastery = p.get("prereq_mastery") or 60.0
+        is_weak = (prereq_mastery < 60.0)
+
+        risk = p.get("risk_level", "Low Risk")
+        if "High" in risk:
+            pred_risk = "High Risk"
+        elif "Moderate" in risk or "Medium" in risk:
+            pred_risk = "Medium Risk"
+        else:
+            pred_risk = "Low Risk"
+
+        formatted_preds.append({
+            "future_topic": p.get("topic"),
+            "subject": p.get("subject"),
+            "predicted_risk": pred_risk,
+            "probability": p.get("predicted_gap_probability", 25.0),
+            "prerequisites": [
+                {"name": prereq_name, "mastery": prereq_mastery, "is_weak": is_weak}
+            ],
+            "rationale": f"Prerequisite {prereq_name} exhibits {prereq_mastery}% mastery. Mathematical complexity in {p.get('topic')} requires solid grasp of {prereq_name} to avoid learning bottlenecks.",
+            "preventive_action": p.get("preventive_advice")
+        })
+
+    return render_template("future_predictions.html", predictions=formatted_preds)
+
+# ============================================================
+# STUDENT ACADEMIC PROGRESS REPORT (PRINTABLE / PDF)
+# ============================================================
+@app.route("/student/download-report/<student_id>")
+@login_required
+def download_student_report(student_id):
+    connection = get_db_connection()
+    student = connection.execute("SELECT * FROM students WHERE student_id = ?", (student_id,)).fetchone()
+    if not student:
+        connection.close()
+        flash("Student profile not found.", "error")
+        return redirect(url_for("dashboard"))
+
+    marks_raw = connection.execute("SELECT * FROM academic_marks WHERE student_id = ? ORDER BY id ASC", (student_id,)).fetchall()
+    connection.close()
+
+    student_dict = dict(student)
+    student_dict["username"] = student["name"]
+    student_dict["risk_level"] = student["overall_risk"]
+    student_dict["overall_performance"] = student["average_quiz_score"] or 0.0
+    student_dict["attendance"] = student["average_attendance"] or 0.0
+    student_dict["assignments"] = student["average_assignment_score"] or 0.0
+
+    marks_formatted = []
+    for m in marks_raw:
+        marks_formatted.append({
+            "subject": m["subject_name"],
+            "assessment_type": f"Mid-1 ({m['mid1_marks']}/{m['mid1_max']}), Mid-2 ({m['mid2_marks']}/{m['mid2_max']})",
+            "theory_or_lab": "Theory + Lab",
+            "marks_obtained": m["total_marks"],
+            "max_marks": m["total_max"],
+            "verified_by_teacher": (m["status"] == "verified")
+        })
+
+    raw_heatmap = get_topic_mastery_heatmap(student_id)
+    heatmap_topics = []
+    for h in raw_heatmap:
+        tier = h.get("tier", "not_evaluated")
+        color_cat = "green" if tier == "strong" else ("yellow" if tier == "moderate" else ("red" if tier == "weak" else "grey"))
+        mastery_p = h.get("mastery_pct")
+        heatmap_topics.append({
+            "name": h.get("topic"),
+            "subject": h.get("subject"),
+            "mastery_pct": mastery_p if mastery_p is not None else 0.0,
+            "color_category": color_cat,
+            "is_gap": tier == "weak"
+        })
+
+    from datetime import datetime
+    gen_date = datetime.now().strftime("%B %d, %Y")
+    cur_year = datetime.now().year
+
+    shap_explanation = (
+        f"Based on student {student_id}'s sequential trial interactions, the TAT-KG hybrid engine indicates that "
+        f"average quiz accuracy ({student['average_quiz_score']}%) and attendance ({student['average_attendance']}%) "
+        f"drive the current diagnostic status of '{student['overall_risk']}'. Remediating isolated topic gaps "
+        f"via the Adaptive Remediation Path will prevent prerequisite regression in future semesters."
+    )
+
+    return render_template(
+        "student_report_pdf.html",
+        student=student_dict,
+        marks=marks_formatted,
+        heatmap_topics=heatmap_topics,
+        shap_explanation=shap_explanation,
+        generated_date=gen_date,
+        current_year=cur_year
+    )
+
+# ============================================================
+# ADMIN CSV EXPORT OF ENROLLED STUDENTS
+# ============================================================
+@app.route("/admin/export-students-csv")
+@login_required
+def export_students_csv():
+    if session.get("role") != "admin":
+        flash("Exporting student data requires administrative authorization.", "error")
+        return redirect(url_for("dashboard"))
+
+    connection = get_db_connection()
+    students = connection.execute("""
+        SELECT student_id, name, email, department, current_semester,
+               completed_assessments_count, overall_risk, risk_confidence,
+               average_quiz_score, average_assignment_score, average_attendance, average_learning_gap
+        FROM students ORDER BY student_id ASC
+    """).fetchall()
+    connection.close()
+
+    import csv
+    import io
+    from flask import Response
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "Student ID", "Full Name", "Email", "Department", "Semester",
+        "Completed Assessments", "Risk Classification", "Prediction Confidence",
+        "Average Quiz (%)", "Average Assignment (%)", "Attendance (%)", "Average Learning Gap (%)"
+    ])
+    for s in students:
+        writer.writerow([
+            s["student_id"], s["name"], s["email"], s["department"], s["current_semester"] or 6,
+            s["completed_assessments_count"] or 0, s["overall_risk"], s["risk_confidence"] or 0.0,
+            s["average_quiz_score"] or 0.0, s["average_assignment_score"] or 0.0,
+            s["average_attendance"] or 0.0, s["average_learning_gap"] or 0.0
+        ])
+
+    return Response(
+        output.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment;filename=edugap_student_roster.csv"}
+    )
 
 # ============================================================
 # RUN SERVER

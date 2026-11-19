@@ -182,8 +182,8 @@
             <svg class="icon icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
         </div>
         <div class="metric-info">
-            <h4>Active Assessments</h4>
-            <div class="value">{{ active_assessments|default(2) }}</div>
+            <h4>Awaiting Assessment</h4>
+            <div class="value" style="color: #38bdf8;">{{ pending_risk|default(0) }} Learners</div>
         </div>
     </div>
     <div class="metric-card" style="--accent: #a855f7; --accent-light: rgba(168, 85, 247, 0.15);">
@@ -198,18 +198,25 @@
     {% else %}
     <!-- Student Metrics: Prominent Risk Level, Scores, and Gaps -->
     {% if current_student and current_student['overall_risk'] == 'High Risk' %}
-    <div class="metric-card" style="--accent: var(--danger);">
+    <div class="metric-card" style="--accent: var(--danger); --accent-light: var(--danger-light);">
     {% elif current_student and current_student['overall_risk'] == 'Medium Risk' %}
-    <div class="metric-card" style="--accent: var(--warning);">
+    <div class="metric-card" style="--accent: var(--warning); --accent-light: var(--warning-light);">
+    {% elif current_student and current_student['overall_risk'] in ['Assessment Pending', 'Insufficient Data'] %}
+    <div class="metric-card" style="--accent: #0ea5e9; --accent-light: rgba(14, 165, 233, 0.15);">
     {% else %}
-    <div class="metric-card" style="--accent: var(--success);">
+    <div class="metric-card" style="--accent: var(--success); --accent-light: var(--success-light);">
     {% endif %}
         <div class="metric-icon-wrap">
             <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
         </div>
         <div class="metric-info">
-            <h4>Your Academic Risk Level</h4>
-            <div class="value" style="font-size: 22px;">{{ current_student["overall_risk"] if current_student else "Low Risk" }}</div>
+            <h4>Diagnostic Risk Classification</h4>
+            <div class="value" style="font-size: 20px;">
+                {{ current_student["overall_risk"] if current_student else "Assessment Pending" }}
+            </div>
+            <div style="font-size: 11px; color: var(--text-muted); margin-top: 3px;">
+                Confidence: {{ "%.0f"|format((current_student['risk_confidence'] if 'risk_confidence' in current_student and current_student['risk_confidence'] else 0.0) * 100) }}% &bull; {{ current_student['completed_assessments_count'] if 'completed_assessments_count' in current_student and current_student['completed_assessments_count'] else 0 }} Completed
+            </div>
         </div>
     </div>
     <div class="metric-card" style="--accent: var(--warning); --accent-light: var(--warning-light);">
@@ -218,7 +225,13 @@
         </div>
         <div class="metric-info">
             <h4>Detected Learning Gap</h4>
-            <div class="value">{{ "%.1f"|format(current_student["average_learning_gap"] if current_student else 0) }}%</div>
+            <div class="value">
+                {% if current_student and current_student['overall_risk'] in ['Assessment Pending', 'Insufficient Data'] and (not current_student['completed_assessments_count']) %}
+                Pending
+                {% else %}
+                {{ "%.1f"|format(current_student["average_learning_gap"] if current_student else 0) }}%
+                {% endif %}
+            </div>
         </div>
     </div>
     <div class="metric-card" style="--accent: var(--primary); --accent-light: var(--primary-light);">
@@ -227,7 +240,13 @@
         </div>
         <div class="metric-info">
             <h4>Average Quiz Score</h4>
-            <div class="value">{{ "%.1f"|format(current_student["average_quiz_score"] if current_student else 0) }}%</div>
+            <div class="value">
+                {% if current_student and current_student['overall_risk'] in ['Assessment Pending', 'Insufficient Data'] and (not current_student['completed_assessments_count']) %}
+                Pending
+                {% else %}
+                {{ "%.1f"|format(current_student["average_quiz_score"] if current_student else 0) }}%
+                {% endif %}
+            </div>
         </div>
     </div>
     <div class="metric-card" style="--accent: var(--info); --accent-light: var(--info-light);">
@@ -241,6 +260,89 @@
     </div>
     {% endif %}
 </div>
+
+<!-- STUDENT WELCOME BANNER FOR ASSESSMENT PENDING -->
+{% if session.get('role') != 'admin' and current_student and current_student['overall_risk'] in ['Assessment Pending', 'Insufficient Data'] %}
+<div class="card" style="margin-bottom: 28px; border-left: 4px solid #0ea5e9; background: linear-gradient(135deg, rgba(14, 165, 233, 0.08) 0%, rgba(99, 102, 241, 0.04) 100%);">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px;">
+        <div style="max-width: 720px;">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                <span class="badge badge-neutral" style="background: rgba(14, 165, 233, 0.15); color: #38bdf8; border-color: rgba(14, 165, 233, 0.3);">
+                    INITIAL EVALUATION REQUIRED
+                </span>
+                <span style="font-size: 13px; color: var(--text-secondary);">Welcome, {{ session.get('username') }}!</span>
+            </div>
+            <h3 style="font-size: 18px; color: var(--text-primary); margin-bottom: 6px;">
+                Complete Initial Diagnostic Assessment to Activate AI Gap Detection
+            </h3>
+            <p style="font-size: 13.5px; color: var(--text-secondary); line-height: 1.6;">
+                Your academic profile is currently in <strong>{{ current_student['overall_risk'] }}</strong> status because you have completed {{ current_student['completed_assessments_count'] if 'completed_assessments_count' in current_student and current_student['completed_assessments_count'] else 0 }} assessments. In accordance with ethical AI evaluation protocols, EduGap AI does not assign arbitrary or default risk categories without empirical student activity data. Take your 10-question Diagnostic Assessment now to map your topic mastery.
+            </p>
+        </div>
+        <div>
+            <a href="{{ url_for('take_assessment', assessment_id=7) }}" class="btn btn-primary" style="padding: 12px 22px; font-weight: 600; font-size: 14px; box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4);">
+                <svg class="icon icon-sm" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                <span>Start Initial Assessment</span>
+            </a>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- STUDENT KNOWLEDGE HEATMAP PREVIEW -->
+{% if session.get('role') != 'admin' and heatmap_topics %}
+<div class="card" style="margin-bottom: 28px;">
+    <div class="card-header">
+        <div>
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                <span class="badge badge-neutral" style="font-size: 11px;">BKT LATENT STATE</span>
+                <span style="font-size: 13px; color: var(--text-secondary);">Topic Mastery Overview</span>
+            </div>
+            <h3 style="font-size: 18px; color: var(--text-primary);">
+                Knowledge Mastery Heatmap Preview
+            </h3>
+        </div>
+        <a href="{{ url_for('heatmap_page') }}" class="btn btn-secondary btn-sm">
+            <span>Explore Full 12-Topic Heatmap &rarr;</span>
+        </a>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px;">
+        {% for h in heatmap_topics[:6] %}
+        <div style="background: var(--bg-body); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 12px; border-left: 3px solid {{ h.color }};">
+            <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">{{ h.subject }}</div>
+            <div style="font-size: 13.5px; font-weight: 600; color: var(--text-primary); margin: 4px 0;">{{ h.topic }}</div>
+            <div style="font-size: 12px; font-weight: 600; color: {{ h.color }};">
+                {{ h.status }} {% if h.mastery_pct is not none %}({{ h.mastery_pct }}%){% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- STUDENT ADAPTIVE LEARNING PATH PREVIEW -->
+{% if session.get('role') != 'admin' and learning_path_info %}
+<div class="card" style="margin-bottom: 28px; background: linear-gradient(135deg, rgba(99, 102, 241, 0.06) 0%, rgba(14, 165, 233, 0.04) 100%);">
+    <div class="card-header">
+        <div>
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                <span class="badge badge-medium" style="font-size: 11px;">REMEDIATION SCAFFOLD</span>
+                <span style="font-size: 13px; color: var(--text-secondary);">Remedial Target: {{ learning_path_info.topic_name }}</span>
+            </div>
+            <h3 style="font-size: 18px; color: var(--text-primary);">
+                Personalized Adaptive Learning Path (Step {{ learning_path_info.current_step }}/6)
+            </h3>
+        </div>
+        <a href="{{ url_for('learning_path_page') }}" class="btn btn-primary btn-sm">
+            <span>Continue 6-Step Pathway &rarr;</span>
+        </a>
+    </div>
+    <div style="font-size: 13.5px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 12px;">
+        Current Remedial Focus: <strong>{{ learning_path_info.steps[learning_path_info.current_step - 1].title if learning_path_info.steps and learning_path_info.current_step <= learning_path_info.steps|length else 'Mastery Validation' }}</strong>.
+        {{ learning_path_info.steps[learning_path_info.current_step - 1].description if learning_path_info.steps and learning_path_info.current_step <= learning_path_info.steps|length else 'Verify gap closure.' }}
+    </div>
+</div>
+{% endif %}
 
 {% if session.get('role') == 'admin' %}
 <!-- ADMIN: HIDDEN LEARNING GAPS DETECTION PANEL -->
@@ -522,12 +624,38 @@
     </div>
 
     <div class="table-actions" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
-        <div class="search-box" style="position: relative; max-width: 320px; width: 100%;">
-            <svg class="icon" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted);" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input type="text" id="studentSearch" class="form-control" style="padding-left: 36px;" placeholder="Search students by name, ID or department...">
+        <div style="display: flex; gap: 10px; flex-wrap: wrap; flex: 1;">
+            <div class="search-box" style="position: relative; max-width: 260px; width: 100%;">
+                <svg class="icon" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted);" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" id="studentSearch" class="form-control" style="padding-left: 36px;" placeholder="Search students..." oninput="filterStudentTable()">
+            </div>
+            {% if session.get('role') == 'admin' %}
+            <select id="departmentFilter" class="form-control" style="width: auto; min-width: 150px;" onchange="filterStudentTable()">
+                <option value="">All Departments</option>
+                <option value="Computer Science">Computer Science</option>
+                <option value="Information Technology">Information Technology</option>
+                <option value="Data Science">Data Science</option>
+            </select>
+            <select id="riskFilter" class="form-control" style="width: auto; min-width: 150px;" onchange="filterStudentTable()">
+                <option value="">All Risk Statuses</option>
+                <option value="Assessment Pending">Assessment Pending</option>
+                <option value="Insufficient Data">Insufficient Data</option>
+                <option value="High Risk">High Risk</option>
+                <option value="Medium Risk">Medium Risk</option>
+                <option value="Low Risk">Low Risk</option>
+            </select>
+            {% endif %}
         </div>
-        <div style="font-size: 13px; color: var(--text-secondary);">
-            Displaying {{ students|length }} active learner profiles
+        <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="font-size: 13px; color: var(--text-secondary);">
+                Displaying {{ students|length }} active learner profiles
+            </div>
+            {% if session.get('role') == 'admin' %}
+            <a href="{{ url_for('export_students_csv') }}" class="btn btn-secondary btn-sm" title="Export Full Student Roster to CSV">
+                <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                <span>Export CSV</span>
+            </a>
+            {% endif %}
         </div>
     </div>
 
@@ -573,12 +701,14 @@
                         {{ "%.1f"|format(st["average_attendance"]) }}%
                     </td>
                     <td>
-                        {% if st['average_learning_gap'] >= 60 %}
-                            <span class="badge badge-high">High Gap</span>
-                        {% elif st['average_learning_gap'] >= 30 %}
-                            <span class="badge badge-medium">Medium Gap</span>
+                        {% if st['overall_risk'] in ['Assessment Pending', 'Insufficient Data'] %}
+                            <span class="badge badge-neutral" style="background: rgba(14, 165, 233, 0.15); color: #38bdf8; border-color: rgba(14, 165, 233, 0.3);">{{ st['overall_risk'] }}</span>
+                        {% elif st['overall_risk'] == 'High Risk' or st['average_learning_gap'] >= 60 %}
+                            <span class="badge badge-high">High Risk</span>
+                        {% elif st['overall_risk'] == 'Medium Risk' or st['average_learning_gap'] >= 30 %}
+                            <span class="badge badge-medium">Medium Risk</span>
                         {% else %}
-                            <span class="badge badge-low">Low Gap</span>
+                            <span class="badge badge-low">Low Risk</span>
                         {% endif %}
                     </td>
                     <td>
@@ -603,16 +733,19 @@
 
 {% block scripts %}
 <script>
-    // Live Search
-    const searchInput = document.getElementById('studentSearch');
-    if (searchInput) {
-        searchInput.addEventListener('input', function() {
-            const filter = this.value.toLowerCase();
-            const rows = document.querySelectorAll('#studentsTable tbody tr');
-            rows.forEach(row => {
-                const text = row.textContent.toLowerCase();
-                row.style.display = text.includes(filter) ? '' : 'none';
-            });
+    // Live Search and Multi-Criteria Filtering
+    function filterStudentTable() {
+        const query = (document.getElementById('studentSearch')?.value || '').toLowerCase();
+        const dept = (document.getElementById('departmentFilter')?.value || '').toLowerCase();
+        const risk = (document.getElementById('riskFilter')?.value || '').toLowerCase();
+
+        const rows = document.querySelectorAll('#studentsTable tbody tr');
+        rows.forEach(row => {
+            const text = row.textContent.toLowerCase();
+            const matchesQuery = !query || text.includes(query);
+            const matchesDept = !dept || text.includes(dept);
+            const matchesRisk = !risk || text.includes(risk);
+            row.style.display = (matchesQuery && matchesDept && matchesRisk) ? '' : 'none';
         });
     }
 

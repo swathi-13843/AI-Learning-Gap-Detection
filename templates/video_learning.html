@@ -1,0 +1,228 @@
+{% extends "base.html" %}
+
+{% block title %}Video Learning &amp; Educational Lectures | EduGap AI{% endblock %}
+{% block header_title %}Video Learning &amp; Concept Lectures{% endblock %}
+
+{% block content %}
+<!-- Overview Card -->
+<div class="card" style="margin-bottom: 24px;">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px;">
+        <div>
+            <span class="badge badge-medium" style="margin-bottom: 8px;">
+                <svg class="icon icon-sm" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                Curated Educational Video Lectures
+            </span>
+            <h2 style="font-family: 'Outfit', sans-serif; font-size: 22px; color: var(--text-primary); margin-bottom: 6px;">
+                Visual Lecture Hall &amp; Targeted Video Remediation
+            </h2>
+            <p style="font-size: 13.5px; color: var(--text-secondary); max-width: 780px; margin: 0;">
+                Stream verified high-yield educational video lectures directly inside EduGap AI. Track your completion progress and access lectures prioritized for your identified topic gaps.
+            </p>
+        </div>
+        <div style="display: flex; gap: 16px; align-items: center;">
+            <div style="text-align: right;">
+                <div style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">Videos Completed</div>
+                <div style="font-size: 20px; font-weight: 700; color: var(--primary);">{{ completed_count }} / {{ total_count }}</div>
+            </div>
+            <div style="width: 50px; height: 50px; border-radius: 50%; background: var(--primary-light); display: flex; align-items: center; justify-content: center; font-weight: 700; color: var(--primary); font-size: 13px;">
+                {{ progress_pct }}%
+            </div>
+        </div>
+    </div>
+
+    <!-- Filter Buttons -->
+    <div style="display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap;" id="videoFilterPills">
+        <button class="btn btn-primary btn-sm" onclick="filterVideos('All', this)">All Lectures ({{ total_count }})</button>
+        <button class="btn btn-secondary btn-sm" onclick="filterVideos('Recommended', this)">Recommended for Your Gaps</button>
+        <button class="btn btn-secondary btn-sm" onclick="filterVideos('Python Basics', this)">Python</button>
+        <button class="btn btn-secondary btn-sm" onclick="filterVideos('SQL Joins', this)">SQL Joins</button>
+        <button class="btn btn-secondary btn-sm" onclick="filterVideos('Statistics', this)">Statistics</button>
+        <button class="btn btn-secondary btn-sm" onclick="filterVideos('Machine Learning', this)">Machine Learning</button>
+    </div>
+</div>
+
+<!-- Recommended Section if weak topics exist -->
+{% if recommended_videos %}
+<div class="card" style="border-left: 4px solid var(--warning); margin-bottom: 24px;">
+    <div class="card-header">
+        <h3 style="color: var(--warning);">
+            <svg class="icon" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+            <span>High-Priority Remedial Lectures (Recommended for Your Weak Topics)</span>
+        </h3>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px;">
+        {% for v in recommended_videos %}
+        <div class="card" style="background: var(--bg-card-hover, rgba(19, 29, 49, 0.6)); border: 1px solid var(--border-color); padding: 14px; display: flex; flex-direction: column; justify-content: space-between;">
+            <div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <span class="badge badge-medium">{{ v['topic'] }}</span>
+                    {% if v['id'] in completed_video_ids %}
+                    <span class="badge badge-low">Watched</span>
+                    {% else %}
+                    <span class="badge badge-high">Action Recommended</span>
+                    {% endif %}
+                </div>
+                <h4 style="font-size: 14.5px; font-weight: 600; color: var(--text-primary); margin-bottom: 6px;">{{ v['title'] }}</h4>
+                <p style="font-size: 12.5px; color: var(--text-secondary); margin-bottom: 12px;">{{ v['description'] }}</p>
+            </div>
+            <div style="display: flex; gap: 8px;">
+                <button class="btn btn-primary btn-sm" style="flex: 1;" data-videoid="{{ v['video_id'] }}" data-vtitle="{{ v['title'] }}" data-resid="{{ v['id'] }}" onclick="playVideoFromElement(this)">
+                    <svg class="icon icon-sm" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                    <span>Watch Now</span>
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- All Videos Grid -->
+<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 20px;" id="allVideosGrid">
+    {% for v in videos %}
+    <div class="card video-card-item" data-topic="{{ v['topic'] }}" data-recommended="{{ 'yes' if v['topic'] in weak_topic_names else 'no' }}" style="display: flex; flex-direction: column; justify-content: space-between;">
+        <div>
+            <!-- Video Thumbnail / Header -->
+            <div style="position: relative; border-radius: var(--radius-sm); overflow: hidden; margin-bottom: 12px; background: #000; height: 160px; display: flex; align-items: center; justify-content: center; cursor: pointer;" data-videoid="{{ v['video_id'] }}" data-vtitle="{{ v['title'] }}" data-resid="{{ v['id'] }}" onclick="playVideoFromElement(this)">
+                {% if v['video_id'] %}
+                <img src="https://img.youtube.com/vi/{{ v['video_id'] }}/mqdefault.jpg" alt="{{ v['title'] }}" style="width: 100%; height: 100%; object-fit: cover; opacity: 0.85;">
+                {% else %}
+                <div style="color: #94a3b8; font-size: 13px;">Video Preview</div>
+                {% endif %}
+                <div style="position: absolute; width: 44px; height: 44px; border-radius: 50%; background: rgba(99, 102, 241, 0.9); display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
+                    <svg class="icon" viewBox="0 0 24 24" style="stroke: #ffffff; fill: #ffffff; width: 18px; height: 18px; margin-left: 2px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                </div>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <span style="font-size: 11px; text-transform: uppercase; font-weight: 600; color: var(--primary);">
+                    {{ v['subject'] }} &bull; {{ v['topic'] }}
+                </span>
+                <span class="badge {% if v['difficulty_level'] == 'Advanced' %}badge-high{% elif v['difficulty_level'] == 'Intermediate' %}badge-medium{% else %}badge-low{% endif %}" style="font-size: 10.5px;">
+                    {{ v['difficulty_level'] }}
+                </span>
+            </div>
+
+            <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: 6px; line-height: 1.4;">
+                {{ v['title'] }}
+            </h3>
+
+            <p style="font-size: 12.5px; color: var(--text-secondary); margin-bottom: 12px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
+                {{ v['description'] }}
+            </p>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border-color); padding-top: 12px; margin-top: 8px;">
+            <button class="btn btn-secondary btn-sm" data-videoid="{{ v['video_id'] }}" data-vtitle="{{ v['title'] }}" data-resid="{{ v['id'] }}" onclick="playVideoFromElement(this)">
+                <svg class="icon icon-sm" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                <span>Watch</span>
+            </button>
+
+            <button id="toggleBtn_{{ v['id'] }}" class="btn btn-sm {% if v['id'] in completed_video_ids %}btn-secondary{% else %}btn-primary{% endif %}" onclick="toggleVideoCompleted({{ v['id'] }})">
+                {% if v['id'] in completed_video_ids %}
+                <svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+                <span>Completed</span>
+                {% else %}
+                <svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>
+                <span>Mark as Watched</span>
+                {% endif %}
+            </button>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Embedded Video Modal Player -->
+<div id="videoPlayerModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 9999; justify-content: center; align-items: center; padding: 20px;">
+    <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; max-width: 860px; width: 100%; padding: 20px; display: flex; flex-direction: column;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+            <h3 id="modalVideoTitle" style="margin: 0; font-size: 17px; color: var(--text-primary); font-weight: 600;">Video Lecture</h3>
+            <button class="btn btn-secondary btn-sm" onclick="closeVideoPlayer()">Close</button>
+        </div>
+        <div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 8px; background: #000;">
+            <iframe id="videoIframe" style="position: absolute; top:0; left: 0; width: 100%; height: 100%; border: 0;" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px;">
+            <a id="externalYoutubeLink" href="#" target="_blank" rel="noopener" class="btn btn-secondary btn-sm">
+                <span>Open on YouTube</span>
+            </a>
+            <button id="modalMarkCompleteBtn" class="btn btn-primary btn-sm" onclick="modalCompleteAction()">
+                <span>Mark as Watched</span>
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentPlayingId = null;
+
+function playVideoFromElement(el) {
+    const videoId = el.getAttribute('data-videoid') || '';
+    const title = el.getAttribute('data-vtitle') || 'Video Lecture';
+    const resId = parseInt(el.getAttribute('data-resid')) || null;
+    openVideoPlayer(videoId, title, resId);
+}
+
+function openVideoPlayer(videoId, title, resourceId) {
+    currentPlayingId = resourceId;
+    document.getElementById('modalVideoTitle').textContent = title;
+    const iframe = document.getElementById('videoIframe');
+    if (videoId) {
+        iframe.src = "https://www.youtube-nocookie.com/embed/" + videoId + "?autoplay=1";
+        document.getElementById('externalYoutubeLink').href = "https://www.youtube.com/watch?v=" + videoId;
+    } else {
+        iframe.src = "";
+        document.getElementById('externalYoutubeLink').href = "https://www.youtube.com/results?search_query=" + encodeURIComponent(title);
+    }
+    document.getElementById('videoPlayerModal').style.display = 'flex';
+}
+
+function closeVideoPlayer() {
+    const iframe = document.getElementById('videoIframe');
+    iframe.src = "";
+    document.getElementById('videoPlayerModal').style.display = 'none';
+}
+
+function toggleVideoCompleted(videoId) {
+    fetch('/api/video/progress', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({video_id: videoId})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.status === 'success') {
+            location.reload();
+        }
+    });
+}
+
+function modalCompleteAction() {
+    if (currentPlayingId) {
+        toggleVideoCompleted(currentPlayingId);
+    }
+}
+
+function filterVideos(filter, btn) {
+    document.querySelectorAll('#videoFilterPills button').forEach(b => {
+        b.classList.remove('btn-primary');
+        b.classList.add('btn-secondary');
+    });
+    btn.classList.remove('btn-secondary');
+    btn.classList.add('btn-primary');
+
+    const cards = document.querySelectorAll('.video-card-item');
+    cards.forEach(c => {
+        const t = c.getAttribute('data-topic');
+        const r = c.getAttribute('data-recommended');
+        if (filter === 'All') {
+            c.style.display = 'flex';
+        } else if (filter === 'Recommended') {
+            c.style.display = (r === 'yes') ? 'flex' : 'none';
+        } else {
+            c.style.display = (t.toLowerCase().includes(filter.toLowerCase())) ? 'flex' : 'none';
+        }
+    });
+}
+</script>
+{% endblock %}

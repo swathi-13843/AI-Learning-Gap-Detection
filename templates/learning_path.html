@@ -1,0 +1,327 @@
+{% extends "base.html" %}
+
+{% block title %}Adaptive Learning Path | EduGap AI{% endblock %}
+{% block header_title %}Personalized Adaptive Remediation Path{% endblock %}
+
+{% block content %}
+<style>
+    .path-hero {
+        background: linear-gradient(135deg, rgba(99, 102, 241, 0.12) 0%, rgba(14, 165, 233, 0.08) 100%);
+        border: 1px solid rgba(99, 102, 241, 0.25);
+        border-radius: var(--radius-lg);
+        padding: 24px;
+        margin-bottom: 24px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 20px;
+    }
+    .path-hero-text h3 {
+        font-family: 'Outfit', sans-serif;
+        font-size: 20px;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin-bottom: 6px;
+    }
+    .path-hero-text p {
+        font-size: 13.5px;
+        color: var(--text-secondary);
+        max-width: 680px;
+        line-height: 1.5;
+    }
+    .path-target-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 14px;
+        border-radius: 9999px;
+        background: rgba(239, 68, 68, 0.15);
+        border: 1px solid rgba(239, 68, 68, 0.3);
+        color: #f87171;
+        font-weight: 600;
+        font-size: 13px;
+    }
+
+    .recovery-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-lg);
+        padding: 20px;
+        margin-bottom: 24px;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 20px;
+    }
+    .recovery-metric {
+        padding: 12px 16px;
+        border-radius: var(--radius-md);
+        background: var(--bg-body);
+        border: 1px solid var(--border-color);
+    }
+    .recovery-label {
+        font-size: 11.5px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--text-muted);
+        margin-bottom: 6px;
+    }
+    .recovery-value {
+        font-size: 22px;
+        font-weight: 700;
+        color: var(--text-primary);
+        font-family: 'Outfit', sans-serif;
+    }
+    .delta-positive {
+        color: #10b981;
+    }
+    .delta-neutral {
+        color: #94a3b8;
+    }
+
+    /* 6-Step Sequence Timeline */
+    .steps-container {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        position: relative;
+    }
+    .steps-container::before {
+        content: '';
+        position: absolute;
+        left: 27px;
+        top: 24px;
+        bottom: 24px;
+        width: 2px;
+        background: var(--border-color);
+        z-index: 1;
+    }
+
+    .step-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
+        padding: 20px 24px;
+        display: flex;
+        align-items: flex-start;
+        gap: 20px;
+        position: relative;
+        z-index: 2;
+        transition: var(--transition);
+    }
+    .step-card:hover {
+        border-color: rgba(99, 102, 241, 0.4);
+    }
+    .step-card.completed {
+        border-color: rgba(16, 185, 129, 0.4);
+        background: rgba(16, 185, 129, 0.03);
+    }
+
+    .step-num-badge {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        background: var(--bg-body);
+        border: 2px solid var(--border-color);
+        color: var(--text-secondary);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 14px;
+        flex-shrink: 0;
+        transition: var(--transition);
+    }
+    .step-card.completed .step-num-badge {
+        background: #10b981;
+        border-color: #10b981;
+        color: #ffffff;
+    }
+    .step-card.active-step .step-num-badge {
+        border-color: var(--primary);
+        color: var(--primary);
+        box-shadow: 0 0 0 4px var(--primary-light);
+    }
+
+    .step-body {
+        flex: 1;
+    }
+    .step-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 6px;
+    }
+    .step-title {
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+    .step-desc {
+        font-size: 13.5px;
+        color: var(--text-secondary);
+        line-height: 1.5;
+        margin-bottom: 12px;
+    }
+    .step-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .progress-bar-wrap {
+        height: 10px;
+        background: var(--bg-body);
+        border: 1px solid var(--border-color);
+        border-radius: 9999px;
+        overflow: hidden;
+        margin-bottom: 16px;
+    }
+    .progress-bar-fill {
+        height: 100%;
+        background: linear-gradient(90deg, var(--primary) 0%, #10b981 100%);
+        border-radius: 9999px;
+        transition: width 0.4s ease;
+    }
+</style>
+
+<!-- Hero Section -->
+<div class="path-hero">
+    <div class="path-hero-text">
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
+            <h3>6-Step Targeted Remediation Pathway</h3>
+            <span class="path-target-badge">
+                <svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                Target Gap: {{ path.topic_name }}
+            </span>
+        </div>
+        <p>
+            This closed-loop learning path has been dynamically synthesized based on your BKT latent knowledge estimate ({{ path.initial_mastery|round(1) }}%) and sequential performance vectors. Follow each pedagogical stage in order to resolve foundational gaps and verify recovery.
+        </p>
+    </div>
+    <div>
+        <div style="text-align: right; margin-bottom: 8px;">
+            <span style="font-size: 12px; color: var(--text-muted); font-weight: 600; text-transform: uppercase;">Overall Completion</span>
+            <span style="font-size: 16px; font-weight: 700; color: var(--text-primary); margin-left: 8px;">{{ path.progress_pct }}%</span>
+        </div>
+        <div style="width: 220px;" class="progress-bar-wrap">
+            <div class="progress-bar-fill" style="width: {{ path.progress_pct }}%;"></div>
+        </div>
+        <form method="POST" action="{{ url_for('reassess_learning_path') }}">
+            <button type="submit" class="btn btn-secondary btn-sm" style="width: 100%;">
+                <svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                Sync Post-Intervention Mastery
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Intervention & Gap Recovery Tracking Card -->
+<div class="recovery-card">
+    <div class="recovery-metric">
+        <div class="recovery-label">Prior Knowledge (BKT)</div>
+        <div class="recovery-value" style="color: #f87171;">{{ path.initial_mastery|round(1) }}%</div>
+        <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Baseline at detection</div>
+    </div>
+    <div class="recovery-metric">
+        <div class="recovery-label">Post-Intervention Mastery</div>
+        <div class="recovery-value" style="color: #38bdf8;">{{ path.current_mastery|round(1) }}%</div>
+        <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Current validated probability</div>
+    </div>
+    <div class="recovery-metric">
+        <div class="recovery-label">Mastery Recovery (&Delta; Mastery)</div>
+        <div class="recovery-value {% if path.delta_mastery > 0 %}delta-positive{% else %}delta-neutral{% endif %}">
+            {% if path.delta_mastery > 0 %}+{% endif %}{{ path.delta_mastery|round(1) }}%
+        </div>
+        <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Net quantitative learning gain</div>
+    </div>
+    <div class="recovery-metric">
+        <div class="recovery-label">Intervention Status</div>
+        <div class="recovery-value" style="font-size: 18px;">
+            {% if path.status == 'Mastered' %}
+            <span style="color: #10b981;">Mastered & Verified</span>
+            {% elif path.status == 'In Progress' %}
+            <span style="color: #fbbf24;">Active Remediation</span>
+            {% else %}
+            <span style="color: #94a3b8;">Pending Initiation</span>
+            {% endif %}
+        </div>
+        <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Updated: {{ path.updated_at[:10] if path.updated_at else 'Recent' }}</div>
+    </div>
+</div>
+
+<!-- 6-Stage Sequence -->
+<div class="steps-container">
+    {% for step in path.steps %}
+    <div class="step-card {% if step.is_completed %}completed{% elif loop.index == path.active_step %}active-step{% endif %}">
+        <div class="step-num-badge">
+            {% if step.is_completed %}
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+            {% else %}
+            {{ step.step_number }}
+            {% endif %}
+        </div>
+        <div class="step-body">
+            <div class="step-header">
+                <div class="step-title">
+                    Stage {{ step.step_number }}: {{ step.title }}
+                </div>
+                <div>
+                    {% if step.is_completed %}
+                    <span class="badge badge-low">
+                        <svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+                        Completed
+                    </span>
+                    {% else %}
+                    <span class="badge badge-neutral">Incomplete</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="step-desc">
+                {{ step.description }}
+            </div>
+            <div class="step-actions">
+                {% if step.action_url %}
+                <a href="{{ step.action_url }}" class="btn btn-secondary btn-sm">
+                    <svg class="icon icon-sm" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                    {{ step.action_label }}
+                </a>
+                {% endif %}
+
+                <form method="POST" action="{{ url_for('toggle_learning_path_step', step_number=step.step_number) }}" style="display: inline;">
+                    {% if step.is_completed %}
+                    <button type="submit" class="btn btn-secondary btn-sm" style="color: var(--text-muted); border-style: dashed;">
+                        Mark as Incomplete
+                    </button>
+                    {% else %}
+                    <button type="submit" class="btn btn-primary btn-sm">
+                        <svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+                        Mark Stage as Complete
+                    </button>
+                    {% endif %}
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Pedagogical Rationale Footer -->
+<div class="card" style="margin-top: 28px;">
+    <div class="card-header">
+        <h3>
+            <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            Instructional Design & Diagnostic Recovery Methodology
+        </h3>
+    </div>
+    <div style="font-size: 13.5px; color: var(--text-secondary); line-height: 1.6;">
+        <p>
+            The 6-step pathway implements a cognitive scaffolding architecture. Learning begins with low-cognitive-load conceptual reinforcement (theory and diagrams), bridges into applied procedural reasoning (worked examples and multi-modal videos), and terminates in active diagnostic assessment. 
+            Once all stages are marked completed and the adaptive validation quiz is submitted, the Bayesian Knowledge Tracing engine recalculates the topic's latent mastery state \(P(L_t)\), measuring the empirical \(\Delta\text{Mastery}\) gain.
+        </p>
+    </div>
+</div>
+{% endblock %}

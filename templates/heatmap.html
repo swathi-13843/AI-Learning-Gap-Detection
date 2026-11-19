@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+
+{% block title %}Knowledge Mastery Heatmap | EduGap AI{% endblock %}
+{% block header_title %}Topic-Wise Knowledge Mastery Heatmap{% endblock %}
+
+{% block content %}
+<!-- Top Header & Legend -->
+<div class="card" style="margin-bottom: 24px;">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px;">
+        <div>
+            <span class="badge badge-medium" style="margin-bottom: 8px;">
+                <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+                Bayesian Knowledge Tracing (BKT) Diagnostic Map
+            </span>
+            <h2 style="font-family: 'Outfit', sans-serif; font-size: 22px; color: var(--text-primary); margin-bottom: 6px;">
+                Topic-Level Knowledge Mastery &amp; Cognitive Health Matrix
+            </h2>
+            <p style="font-size: 13.5px; color: var(--text-secondary); max-width: 780px; margin: 0;">
+                Real-time multi-topic cognitive diagnostic dashboard. Click on any topic to inspect assessment history, explore theoretical explanations, stream video lectures, and launch adaptive remediation.
+            </p>
+        </div>
+
+        <!-- Color Legend -->
+        <div style="background: var(--bg-card-hover, rgba(19, 29, 49, 0.6)); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 12px 16px; display: flex; flex-direction: column; gap: 8px;">
+            <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Mastery Thresholds</div>
+            <div style="display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px;">
+                <span style="display: flex; align-items: center; gap: 6px;">
+                    <span style="width: 12px; height: 12px; border-radius: 3px; background: #10b981; display: inline-block;"></span>
+                    <strong style="color: #10b981;">Strong (&gt;= 70%)</strong>
+                </span>
+                <span style="display: flex; align-items: center; gap: 6px;">
+                    <span style="width: 12px; height: 12px; border-radius: 3px; background: #f59e0b; display: inline-block;"></span>
+                    <strong style="color: #f59e0b;">Moderate (40-69%)</strong>
+                </span>
+                <span style="display: flex; align-items: center; gap: 6px;">
+                    <span style="width: 12px; height: 12px; border-radius: 3px; background: #ef4444; display: inline-block;"></span>
+                    <strong style="color: #ef4444;">Needs Improvement (&lt; 40%)</strong>
+                </span>
+                <span style="display: flex; align-items: center; gap: 6px;">
+                    <span style="width: 12px; height: 12px; border-radius: 3px; background: #64748b; display: inline-block;"></span>
+                    <strong style="color: #94a3b8;">Not Evaluated</strong>
+                </span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Heatmap Grid (12 Topics) -->
+<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 18px; margin-bottom: 24px;">
+    {% for h in heatmap %}
+    <div class="card heatmap-topic-tile" style="border-top: 4px solid {{ h['color'] }}; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; display: flex; flex-direction: column; justify-content: space-between;" onclick="openTopicDrawer('{{ h['topic'] }}', '{{ h['subject'] }}', '{{ h['status'] }}', '{{ h['color'] }}', {{ h['mastery_pct'] if h['mastery_pct'] is not none else 'null' }}, {{ h['attempts_count'] }}, '{{ h['prerequisite'] or 'None' }}')">
+        <div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <span style="font-size: 11px; text-transform: uppercase; font-weight: 600; color: var(--text-muted);">
+                    {{ h['subject'] }}
+                </span>
+                <span class="badge {{ h['badge_class'] }}" style="font-size: 10px;">
+                    {{ h['status'] }}
+                </span>
+            </div>
+
+            <h3 style="font-size: 17px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px;">
+                {{ h['topic'] }}
+            </h3>
+
+            <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 6px;">
+                <span style="font-size: 12px; color: var(--text-secondary);">Cognitive Mastery:</span>
+                {% if h['is_evaluated'] %}
+                <span style="font-size: 20px; font-weight: 700; color: {{ h['color'] }};">{{ h['mastery_pct'] }}%</span>
+                {% else %}
+                <span style="font-size: 13px; font-weight: 600; color: var(--text-muted);">Pending</span>
+                {% endif %}
+            </div>
+
+            <!-- Visual Bar -->
+            <div style="width: 100%; height: 8px; background: rgba(148, 163, 184, 0.15); border-radius: 4px; overflow: hidden; margin-bottom: 12px;">
+                {% if h['is_evaluated'] %}
+                <div style="width: {{ h['mastery_pct'] }}%; height: 100%; background: {{ h['color'] }}; border-radius: 4px;"></div>
+                {% else %}
+                <div style="width: 0%; height: 100%; background: #64748b;"></div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border-color); padding-top: 10px; font-size: 11.5px; color: var(--text-secondary);">
+            <span>Attempts: <strong>{{ h['attempts_count'] }}</strong></span>
+            <span style="color: var(--primary); font-weight: 500;">Click for Details &rarr;</span>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Topic Detail Drawer / Modal -->
+<div id="topicDetailModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 9999; justify-content: center; align-items: center; padding: 20px;">
+    <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; max-width: 650px; width: 100%; padding: 24px; max-height: 90vh; overflow-y: auto;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <div>
+                <span id="modalTopicSubject" style="font-size: 11px; text-transform: uppercase; font-weight: 600; color: var(--primary);"></span>
+                <h3 id="modalTopicTitle" style="margin: 0; font-size: 20px; color: var(--text-primary); font-weight: 700;"></h3>
+            </div>
+            <button class="btn btn-secondary btn-sm" onclick="closeTopicDrawer()">Close</button>
+        </div>
+
+        <!-- Metric Highlight -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 18px;">
+            <div style="background: var(--bg-card-hover, #131d31); padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+                <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">Estimated Mastery</div>
+                <div id="modalMasteryVal" style="font-size: 22px; font-weight: 700; margin-top: 4px;"></div>
+            </div>
+            <div style="background: var(--bg-card-hover, #131d31); padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+                <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">Prerequisite Concept</div>
+                <div id="modalPrereqVal" style="font-size: 15px; font-weight: 600; color: var(--text-primary); margin-top: 8px;"></div>
+            </div>
+        </div>
+
+        <!-- Action Links -->
+        <h4 style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 12px;">Recommended Actions for this Topic:</h4>
+        <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;">
+            <a id="modalTheoryLink" href="#" class="btn btn-secondary" style="justify-content: flex-start;">
+                <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+                <span>Read Theory &amp; View Architecture Diagram</span>
+            </a>
+            <a id="modalVideoLink" href="#" class="btn btn-secondary" style="justify-content: flex-start;">
+                <svg class="icon icon-sm" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                <span>Stream Curated Video Lectures</span>
+            </a>
+            <a id="modalQuizLink" href="#" class="btn btn-primary" style="justify-content: flex-start;">
+                <svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                <span>Take Practice Quiz or Assessment</span>
+            </a>
+        </div>
+    </div>
+</div>
+
+<script>
+function openTopicDrawer(topic, subject, status, color, mastery, attempts, prereq) {
+    document.getElementById('modalTopicSubject').textContent = subject;
+    document.getElementById('modalTopicTitle').textContent = topic;
+    const mVal = document.getElementById('modalMasteryVal');
+    if (mastery !== null) {
+        mVal.textContent = mastery + '%';
+        mVal.style.color = color;
+    } else {
+        mVal.textContent = 'Not Evaluated';
+        mVal.style.color = '#94a3b8';
+    }
+    document.getElementById('modalPrereqVal').textContent = prereq;
+    document.getElementById('modalTheoryLink').href = '/theory/' + encodeURIComponent(topic);
+    document.getElementById('modalVideoLink').href = '/video-learning?topic=' + encodeURIComponent(topic);
+    document.getElementById('modalQuizLink').href = '/assessments';
+
+    document.getElementById('topicDetailModal').style.display = 'flex';
+}
+
+function closeTopicDrawer() {
+    document.getElementById('topicDetailModal').style.display = 'none';
+}
+</script>
+{% endblock %}
