@@ -40,7 +40,7 @@
     .action-badge:hover {
         background: var(--primary-light);
         border-color: var(--primary);
-        color: #ffffff;
+        color: var(--primary);
     }
 </style>
 
@@ -100,13 +100,23 @@
                         {{ st["department"] if st["department"] else "Computer Science" }}
                     </td>
                     <td>
-                        <div style="font-weight: 600; color: #ffffff;">{{ "%.1f"|format((st["average_quiz_score"] + st["average_assignment_score"]) / 2) }}%</div>
+                        <div style="font-weight: 600; color: var(--text-primary);">{{ "%.1f"|format((st["average_quiz_score"] + st["average_assignment_score"]) / 2) }}%</div>
                         <div style="font-size: 11px; color: var(--text-muted);">Quiz: {{ "%.1f"|format(st["average_quiz_score"]) }}% | Asgn: {{ "%.1f"|format(st["average_assignment_score"]) }}%</div>
                     </td>
                     <td>
-                        <span style="font-weight: 600; color: {% if st['average_learning_gap'] >= 60 %}#f87171{% elif st['average_learning_gap'] >= 30 %}#fbbf24{% else %}#34d399{% endif %};">
+                        {% if st['average_learning_gap'] >= 60 %}
+                        <span style="font-weight: 600; color: #f87171;">
                             {{ "%.1f"|format(st["average_learning_gap"]) }}%
                         </span>
+                        {% elif st['average_learning_gap'] >= 30 %}
+                        <span style="font-weight: 600; color: #fbbf24;">
+                            {{ "%.1f"|format(st["average_learning_gap"]) }}%
+                        </span>
+                        {% else %}
+                        <span style="font-weight: 600; color: #34d399;">
+                            {{ "%.1f"|format(st["average_learning_gap"]) }}%
+                        </span>
+                        {% endif %}
                     </td>
                     <td>
                         {% if st["overall_risk"] == "High Risk" %}

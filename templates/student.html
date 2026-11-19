@@ -38,7 +38,7 @@
                 {{ (student['name'] if student['name'] else 'S')[0]|upper }}
             </div>
             <div>
-                <h2 style="font-family: 'Outfit', sans-serif; font-size: 22px; color: #ffffff;">{{ student['name'] if student['name'] else "Student " ~ student['student_id'] }}</h2>
+                <h2 style="font-family: 'Outfit', sans-serif; font-size: 22px; color: var(--text-primary);">{{ student['name'] if student['name'] else "Student " ~ student['student_id'] }}</h2>
                 <div style="color: var(--text-secondary); font-size: 13.5px;">
                     <span>ID: {{ student['student_id'] }}</span> &bull; 
                     <span>Department: {{ student['department'] if student['department'] else 'Computer Science' }}</span>
@@ -61,11 +61,11 @@
 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px;">
     <div class="card" style="padding: 16px;">
         <span style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">Average Quiz Score</span>
-        <div style="font-size: 24px; font-weight: 700; color: #ffffff; margin-top: 4px;">{{ "%.1f"|format(student['average_quiz_score']) }}%</div>
+        <div style="font-size: 24px; font-weight: 700; color: var(--text-primary); margin-top: 4px;">{{ "%.1f"|format(student['average_quiz_score']) }}%</div>
     </div>
     <div class="card" style="padding: 16px;">
         <span style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">Assignment Score</span>
-        <div style="font-size: 24px; font-weight: 700; color: #ffffff; margin-top: 4px;">{{ "%.1f"|format(student['average_assignment_score']) }}%</div>
+        <div style="font-size: 24px; font-weight: 700; color: var(--text-primary); margin-top: 4px;">{{ "%.1f"|format(student['average_assignment_score']) }}%</div>
     </div>
     <div class="card" style="padding: 16px;">
         <span style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">Learning Gap Index</span>
@@ -79,7 +79,7 @@
     </div>
     <div class="card" style="padding: 16px;">
         <span style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">Cohort Attendance</span>
-        <div style="font-size: 24px; font-weight: 700; color: #ffffff; margin-top: 4px;">{{ "%.1f"|format(student['average_attendance']) }}%</div>
+        <div style="font-size: 24px; font-weight: 700; color: var(--text-primary); margin-top: 4px;">{{ "%.1f"|format(student['average_attendance']) }}%</div>
     </div>
 </div>
 
@@ -99,26 +99,52 @@
                     <tr>
                         <th>Topic</th>
                         <th>Gap Index</th>
+                        <th>BKT Mastery</th>
                         <th>Classification</th>
-                        <th>Priority</th>
+                        <th>Status</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for g in gaps %}
                     <tr>
-                        <td style="font-weight: 600;">{{ g['topic'] }}</td>
+                        <td style="font-weight: 600;">
+                            {{ g['topic'] }}
+                            {% if g['is_hidden_gap'] %}
+                            <span class="badge badge-medium" style="font-size: 10px; margin-left: 6px;">Hidden Gap Alert</span>
+                            {% endif %}
+                        </td>
                         <td>{{ "%.1f"|format(g['learning_gap_score']) }}%</td>
                         <td>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <div style="flex: 1; max-width: 65px; height: 6px; background: var(--border-color, rgba(148, 163, 184, 0.2)); border-radius: 3px; overflow: hidden;">
+                                    <svg width="100%" height="6" style="display: block;">
+                                        {% if g['bkt_mastery_pct']|default(50) < 40 %}
+                                        <rect width="{{ g['bkt_mastery_pct']|default(50) }}%" height="6" fill="#ef4444" rx="3" />
+                                        {% elif g['bkt_mastery_pct']|default(50) < 70 %}
+                                        <rect width="{{ g['bkt_mastery_pct']|default(50) }}%" height="6" fill="#f59e0b" rx="3" />
+                                        {% else %}
+                                        <rect width="{{ g['bkt_mastery_pct']|default(50) }}%" height="6" fill="#10b981" rx="3" />
+                                        {% endif %}
+                                    </svg>
+                                </div>
+                                <span style="font-size: 12px; font-weight: 600; color: #818cf8;">{{ g['bkt_mastery_pct']|default(50) }}%</span>
+                            </div>
+                        </td>
+                        <td>
                             {% if g['gap_category'] == 'High Gap' or g['gap_category'] == 'High' %}
-                            <span class="badge badge-high">Critical</span>
+                            <span class="badge badge-high">Critical Gap</span>
                             {% elif g['gap_category'] == 'Medium Gap' or g['gap_category'] == 'Medium' %}
-                            <span class="badge badge-medium">Moderate</span>
+                            <span class="badge badge-medium">Moderate Gap</span>
                             {% else %}
-                            <span class="badge badge-low">Normal</span>
+                            <span class="badge badge-low">Proficient</span>
                             {% endif %}
                         </td>
                         <td>
+                            {% if g['is_hidden_gap'] %}
+                            <span class="badge badge-medium" title="Topic gap masked by high overall average">Isolated Deficit</span>
+                            {% else %}
                             <span class="badge badge-neutral">{{ g['priority'] }}</span>
+                            {% endif %}
                         </td>
                     </tr>
                     {% endfor %}
@@ -174,12 +200,20 @@
                     <td style="font-family: monospace;">#{{ att['id'] }}</td>
                     <td style="font-weight: 600;">{{ att['assessment_title'] }}</td>
                     <td style="font-size: 12px; color: var(--text-secondary);">{{ att['started_at'] }}</td>
-                    <td><strong>{{ "%.1f"|format(att['score']) }} / {{ att['max_score'] }}</strong></td>
+                    <td><strong>{{ "%.1f"|format(att['score']|default(0.0)|float) }} / {{ att['max_score'] }}</strong></td>
                     <td>
-                        {% if att['percentage'] >= att['passing_marks'] %}
-                        <span style="font-weight: 700; color: #34d399;">{{ "%.1f"|format(att['percentage']) }}%</span>
+                        {% if att['percentage'] is not none and att['percentage'] != '' %}
+                            {% if att['percentage']|float >= att['passing_marks']|default(40)|float %}
+                            <span style="font-weight: 700; color: #34d399;">
+                                {{ "%.1f"|format(att['percentage']|float) }}%
+                            </span>
+                            {% else %}
+                            <span style="font-weight: 700; color: #f87171;">
+                                {{ "%.1f"|format(att['percentage']|float) }}%
+                            </span>
+                            {% endif %}
                         {% else %}
-                        <span style="font-weight: 700; color: #f87171;">{{ "%.1f"|format(att['percentage']) }}%</span>
+                            <span style="color: var(--text-muted); font-size: 12px;">In Progress</span>
                         {% endif %}
                     </td>
                     <td>
@@ -223,7 +257,7 @@
                 <span style="font-weight: 600; color: var(--primary);">{{ g['admin_name'] }}</span>
                 <span style="font-size: 11.5px; color: var(--text-secondary);">{{ g['created_at'] }}</span>
             </div>
-            <p style="font-size: 13.5px; color: #ffffff; line-height: 1.5; margin-bottom: 8px;">{{ g['guidance_text'] }}</p>
+            <p style="font-size: 13.5px; color: var(--text-primary); line-height: 1.5; margin-bottom: 8px;">{{ g['guidance_text'] }}</p>
             {% if g['improvement_goals'] %}
             <div style="font-size: 12px; color: #fbbf24; margin-bottom: 4px;"><strong>Goals:</strong> {{ g['improvement_goals'] }}</div>
             {% endif %}

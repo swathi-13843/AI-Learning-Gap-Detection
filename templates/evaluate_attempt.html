@@ -17,14 +17,14 @@
     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
         <div>
             <div style="font-size: 12px; color: var(--primary); font-weight: 600; text-transform: uppercase;">{{ assessment['title'] }}</div>
-            <h2 style="font-family: 'Outfit', sans-serif; font-size: 20px; color: #ffffff;">Candidate: {{ student['name'] if student else attempt['student_id'] }} ({{ attempt['student_id'] }})</h2>
+            <h2 style="font-family: 'Outfit', sans-serif; font-size: 20px; color: var(--text-primary);">Candidate: {{ student['name'] if student else attempt['student_id'] }} ({{ attempt['student_id'] }})</h2>
             <div style="font-size: 12.5px; color: var(--text-secondary); margin-top: 4px;">
                 Started: {{ attempt['started_at'] }} &bull; Submitted: {{ attempt['submitted_at'] }}
             </div>
         </div>
         <div style="text-align: right;">
             <div style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">Current Total Score</div>
-            <div style="font-size: 24px; font-weight: 700; color: #ffffff;">{{ "%.1f"|format(attempt['score']) }} / {{ attempt['max_score'] }}</div>
+            <div style="font-size: 24px; font-weight: 700; color: var(--text-primary);">{{ "%.1f"|format(attempt['score']|default(0.0)|float) }} / {{ attempt['max_score'] }}</div>
         </div>
     </div>
 </div>
@@ -33,13 +33,19 @@
     <!-- Questions & Answers -->
     <div style="display: flex; flex-direction: column; gap: 18px; margin-bottom: 24px;">
         {% for item in q_answers %}
-        <div class="card" style="border-left: 4px solid {% if item['question_type'] == 'subjective' %}#fbbf24{% elif item['is_correct'] %}#10b981{% else %}#ef4444{% endif %};">
+        {% if item['question_type'] == 'subjective' %}
+        <div class="card" style="border-left: 4px solid #fbbf24;">
+        {% elif item['is_correct'] %}
+        <div class="card" style="border-left: 4px solid #10b981;">
+        {% else %}
+        <div class="card" style="border-left: 4px solid #ef4444;">
+        {% endif %}
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                 <span style="font-weight: 600; color: var(--text-secondary); font-size: 13px;">Question {{ loop.index }} ({{ item['question_type']|upper }})</span>
                 <span class="badge badge-neutral">Max Marks: {{ item['marks'] }}</span>
             </div>
 
-            <p style="font-size: 14.5px; color: #ffffff; font-weight: 500; margin-bottom: 14px; line-height: 1.5;">
+            <p style="font-size: 14.5px; color: var(--text-primary); font-weight: 500; margin-bottom: 14px; line-height: 1.5;">
                 {{ item['question_text'] }}
             </p>
 
@@ -52,9 +58,9 @@
             </div>
             {% endif %}
 
-            <div style="background: rgba(19, 29, 49, 0.7); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 14px; margin-bottom: 14px;">
+            <div style="background: var(--bg-card-hover, rgba(19, 29, 49, 0.7)); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 14px; margin-bottom: 14px;">
                 <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 4px;">Candidate's Submitted Answer:</div>
-                <div style="font-size: 14px; color: #ffffff; font-weight: 600;">{{ item['student_answer'] if item['student_answer'] else '(No answer submitted)' }}</div>
+                <div style="font-size: 14px; color: var(--text-primary); font-weight: 600;">{{ item['student_answer'] if item['student_answer'] else '(No answer submitted)' }}</div>
                 <div style="font-size: 12px; color: #34d399; margin-top: 6px;">Correct Answer Key / Rubric: <strong>{{ item['correct_answer'] }}</strong></div>
             </div>
 

@@ -9,6 +9,13 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700&display=swap" rel="stylesheet">
 
+    <script>
+        (function() {
+            const savedTheme = localStorage.getItem('edugap_theme') || 'dark';
+            document.documentElement.setAttribute('data-theme', savedTheme);
+        })();
+    </script>
+
     <style>
         :root {
             --bg-body: #0b0f19;
@@ -19,6 +26,28 @@
             --primary: #6366f1;
             --primary-hover: #4f46e5;
             --danger: #ef4444;
+        }
+
+        [data-theme="light"] {
+            --bg-body: #f8fafc;
+            --bg-card: #ffffff;
+            --border-color: #e2e8f0;
+            --text-primary: #0f172a;
+            --text-secondary: #475569;
+        }
+
+        [data-theme="light"] .auth-container {
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01);
+        }
+
+        [data-theme="light"] .auth-header h1 {
+            color: #0f172a;
+        }
+
+        [data-theme="light"] .form-control {
+            background-color: #ffffff;
+            color: #0f172a;
+            border-color: #cbd5e1;
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; }

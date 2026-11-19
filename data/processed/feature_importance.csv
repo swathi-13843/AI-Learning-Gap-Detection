@@ -1,10 +1,59 @@
-feature,importance
-quiz_score,0.17379030896140574
-assignment_score,0.07718532965218065
-previous_topic_score,0.04706445520436532
-engagement_score,0.0386407648280442
-lessons_completed,0.015878355559349275
-videos_watched,0.013136627455297624
-login_frequency,0.007238680019677443
-attendance,0.004539969937721722
-days_inactive,0.003920179388592578
+raw_feature,feature,importance
+gru_h_25,Temporal Sequence Latent #25,1.1204332849442344
+previous_topic_score,Previous Topic Score,0.5255886819736231
+gru_h_20,Temporal Sequence Latent #20,0.43307307935555733
+gru_h_4,Temporal Sequence Latent #4,0.31368137606008173
+gru_h_5,Temporal Sequence Latent #5,0.20059053399299387
+gru_h_17,Temporal Sequence Latent #17,0.12469258724923914
+gru_h_14,Temporal Sequence Latent #14,0.1224632663343383
+gru_h_30,Temporal Sequence Latent #30,0.09730240473129839
+gru_h_10,Temporal Sequence Latent #10,0.09291323540036486
+assignment_score,Assignment Score,0.05794332503873909
+gru_h_31,Temporal Sequence Latent #31,0.04242992405169001
+quiz_score,Quiz Score,0.034792112099585805
+gru_h_7,Temporal Sequence Latent #7,0.03335571805993307
+gru_h_27,Temporal Sequence Latent #27,0.032357083564965035
+recent_performance_trend,Recent Performance Trend,0.031718764266993243
+gru_h_23,Temporal Sequence Latent #23,0.028410917929956526
+gru_h_24,Temporal Sequence Latent #24,0.028292360645586368
+gru_h_3,Temporal Sequence Latent #3,0.026706826368648486
+topic_gap_differential,Topic Gap Differential,0.019176002328533556
+gru_h_18,Temporal Sequence Latent #18,0.01829821116445927
+gru_h_6,Temporal Sequence Latent #6,0.017531278202919758
+gru_h_19,Temporal Sequence Latent #19,0.016152247240719127
+gru_h_1,Temporal Sequence Latent #1,0.015477975338825696
+gru_h_8,Temporal Sequence Latent #8,0.015425496310024711
+learning_progress_over_time,Learning Progress Over Time,0.014021035078341798
+gru_h_16,Temporal Sequence Latent #16,0.011974038286723774
+gru_h_28,Temporal Sequence Latent #28,0.011595762718762566
+attendance,Attendance,0.011429559656343034
+gru_h_13,Temporal Sequence Latent #13,0.010341325009560849
+gru_h_2,Temporal Sequence Latent #2,0.009562388072435203
+gru_h_12,Temporal Sequence Latent #12,0.009258607698351512
+gru_h_26,Temporal Sequence Latent #26,0.008689810005835418
+engagement_score,Engagement Score,0.008317773908417854
+overall_avg_quiz,Overall Avg Quiz,0.008244578581015492
+activity_consistency,Activity Consistency,0.00812686973912412
+overall_attendance,Overall Attendance,0.00793587931356058
+gru_h_11,Temporal Sequence Latent #11,0.007421557083808142
+gru_h_22,Temporal Sequence Latent #22,0.007311251161246799
+quiz_improvement_rate,Quiz Improvement Rate,0.007098148029749067
+gru_h_21,Temporal Sequence Latent #21,0.006709276504954535
+gru_h_15,Temporal Sequence Latent #15,0.006085705528283084
+overall_avg_assignment,Overall Avg Assignment,0.006009524495194589
+previous_topic_dependency,Previous Topic Dependency,0.004934343774547456
+gru_h_9,Temporal Sequence Latent #9,0.00425376213162566
+gru_h_0,Temporal Sequence Latent #0,0.003967576122017075
+bkt_mastery_prob,Bkt Mastery Prob,0.003246062507739177
+days_inactive,Days Inactive,0.002894790589848521
+videos_watched,Videos Watched,0.002860000062852486
+gru_h_29,Temporal Sequence Latent #29,0.0028481310254592717
+lessons_completed,Lessons Completed,0.002032168373245961
+login_frequency,Login Frequency,0.0015468375305796645
+bkt_learning_gain,Bkt Learning Gain,0.0013421566978670855
+quiz_accuracy,Quiz Accuracy,0.0009803597536947699
+bkt_slip_risk,Bkt Slip Risk,0.0006676022149521223
+topic_completion_rate,Topic Completion Rate,0.000315456986903696
+bkt_guess_prob,Bkt Guess Prob,0.0
+is_hidden_gap_candidate,Is Hidden Gap Candidate,0.0
+bkt_low_mastery_flag,Bkt Low Mastery Flag,0.0

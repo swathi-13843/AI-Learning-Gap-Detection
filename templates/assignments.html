@@ -33,7 +33,7 @@
         font-family: 'Outfit', sans-serif;
         font-size: 18px;
         font-weight: 600;
-        color: #ffffff;
+        color: var(--text-primary);
         margin-bottom: 6px;
     }
     .assignment-desc {
@@ -125,10 +125,10 @@
     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
         <div>
             {% if is_admin %}
-            <h2 style="font-family: 'Outfit', sans-serif; font-size: 20px; color: #ffffff; margin-bottom: 4px;">Student Project Submissions & Evaluation Console</h2>
+            <h2 style="font-family: 'Outfit', sans-serif; font-size: 20px; color: var(--text-primary); margin-bottom: 4px;">Student Project Submissions & Evaluation Console</h2>
             <p style="color: var(--text-secondary); font-size: 13.5px;">Review submitted student codebase implementations, inspect repositories, assign scores, and provide structured qualitative feedback.</p>
             {% else %}
-            <h2 style="font-family: 'Outfit', sans-serif; font-size: 20px; color: #ffffff; margin-bottom: 4px;">Hands-on Curriculum Tasks & Assessments</h2>
+            <h2 style="font-family: 'Outfit', sans-serif; font-size: 20px; color: var(--text-primary); margin-bottom: 4px;">Hands-on Curriculum Tasks & Assessments</h2>
             <p style="color: var(--text-secondary); font-size: 13.5px;">Practical implementations evaluating code architecture, algorithmic proficiency, and machine learning models.</p>
             {% endif %}
         </div>
@@ -155,9 +155,9 @@
             <tbody>
                 {% for sub in submissions %}
                 <tr style="border-bottom: 1px solid var(--border-color);">
-                    <td style="padding: 14px; font-weight: 600; color: #ffffff;">#{{ sub['id'] }}</td>
+                    <td style="padding: 14px; font-weight: 600; color: var(--text-primary);">#{{ sub['id'] }}</td>
                     <td style="padding: 14px;">
-                        <div style="font-weight: 600; color: #ffffff;">{{ sub['student_name'] or sub['student_id'] }}</div>
+                        <div style="font-weight: 600; color: var(--text-primary);">{{ sub['student_name'] or sub['student_id'] }}</div>
                         <div style="font-size: 11px; color: var(--text-muted);">{{ sub['student_id'] }} &bull; {{ sub['department'] or 'Computer Science' }}</div>
                     </td>
                     <td style="padding: 14px; font-weight: 500; color: var(--text-primary);">
@@ -230,7 +230,7 @@
         <button type="button" class="modal-close-btn" onclick="document.getElementById('gradeModal').classList.remove('active')">
             <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
-        <h3 style="font-family: 'Outfit', sans-serif; font-size: 18px; color: #ffffff; margin-bottom: 6px;">Evaluate Student Project</h3>
+        <h3 style="font-family: 'Outfit', sans-serif; font-size: 18px; color: var(--text-primary); margin-bottom: 6px;">Evaluate Student Project</h3>
         <p style="font-size: 12.5px; color: var(--text-secondary); margin-bottom: 18px;" id="gradeModalSubtitle">Assign marks and feedback</p>
         
         <form method="POST" id="gradeForm" action="">
@@ -301,7 +301,7 @@ document.addEventListener('DOMContentLoaded', function() {
             </div>
             <div style="text-align: right;">
                 <div style="font-size: 11px; text-transform: uppercase; color: var(--text-muted);">Maximum Score</div>
-                <div style="font-size: 20px; font-weight: 700; color: #ffffff;">{{ a['max_score']|int }} Pts</div>
+                <div style="font-size: 20px; font-weight: 700; color: var(--text-primary);">{{ a['max_score']|int }} Pts</div>
             </div>
         </div>
 
@@ -322,7 +322,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 {% endif %}
                 {% if sub['file_name'] %}
                 <div style="color: var(--text-secondary); font-size: 12px;">
-                    Uploaded File: <strong style="color: #ffffff;">{{ sub['file_name'] }}</strong>
+                    Uploaded File: <strong style="color: var(--text-primary);">{{ sub['file_name'] }}</strong>
                 </div>
                 {% endif %}
                 {% if sub['github_repo'] %}

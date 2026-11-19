@@ -1,4 +1,6 @@
 import os
+import tempfile
+os.environ.setdefault("MPLCONFIGDIR", os.path.join(tempfile.gettempdir(), "matplotlib_edugap"))
 import sqlite3
 from functools import wraps
 from pathlib import Path
@@ -11,7 +13,8 @@ from flask import (
     url_for,
     session,
     flash,
-    jsonify
+    jsonify,
+    send_from_directory
 )
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -19,7 +22,10 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from src.ai_engine import (
     predict_student_risk,
     get_student_cluster_persona,
-    generate_topic_recommendation
+    generate_topic_recommendation,
+    predict_topic_learning_gap_hybrid,
+    load_model_comparison_metrics,
+    load_shap_feature_importance
 )
 from src.curriculum_data import CURRICULUM_ROADMAP
 
@@ -72,11 +78,18 @@ def dashboard():
 
         # Fetch weak topics from learning_gaps and student answers
         weak_topics = connection.execute("""
-            SELECT topic FROM learning_gaps
-            WHERE student_id = ? AND learning_gap_score >= 30.0
+            SELECT * FROM learning_gaps
+            WHERE student_id = ?
             ORDER BY learning_gap_score DESC
         """, (student_id,)).fetchall()
-        weak_topic_names = [w["topic"] for w in weak_topics]
+        weak_topic_names = [w["topic"] for w in weak_topics if w["learning_gap_score"] >= 30.0]
+
+        # Detect Hidden Gaps for this student (strong overall average but weak on specific topic)
+        overall_avg = float(student["average_quiz_score"]) if student else 50.0
+        hidden_topics_for_student = [
+            w for w in weak_topics
+            if overall_avg >= 70.0 and w["learning_gap_score"] >= 45.0
+        ]
 
         # Fetch recommended YouTube videos matching weak topics or assigned specifically
         if weak_topic_names:
@@ -104,7 +117,9 @@ def dashboard():
                 students=[],
                 current_student=None,
                 student_guidance_list=[],
-                recommended_videos=[]
+                recommended_videos=[],
+                weak_topics=[],
+                hidden_topics_for_student=[]
             )
 
         return render_template(
@@ -116,7 +131,9 @@ def dashboard():
             students=[student],
             current_student=student,
             student_guidance_list=student_guidance_list,
-            recommended_videos=recommended_videos
+            recommended_videos=recommended_videos,
+            weak_topics=weak_topics,
+            hidden_topics_for_student=hidden_topics_for_student
         )
 
     # ADMIN / ACADEMIC MONITOR CONSOLE
@@ -134,6 +151,33 @@ def dashboard():
     avg_gap_row = connection.execute("SELECT AVG(average_learning_gap) FROM students").fetchone()
     cohort_avg_gap = round(avg_gap_row[0], 1) if avg_gap_row and avg_gap_row[0] is not None else 35.0
 
+    # Total detected topic learning gaps and severity breakdown
+    total_gaps_count = connection.execute("SELECT COUNT(*) FROM learning_gaps").fetchone()[0]
+    high_gap_count = connection.execute("SELECT COUNT(*) FROM learning_gaps WHERE gap_category = 'High Gap'").fetchone()[0]
+    med_gap_count = connection.execute("SELECT COUNT(*) FROM learning_gaps WHERE gap_category = 'Medium Gap'").fetchone()[0]
+    low_gap_count = connection.execute("SELECT COUNT(*) FROM learning_gaps WHERE gap_category = 'Low Gap'").fetchone()[0]
+
+    # Topic-wise learning-gap breakdown
+    topic_gap_analysis = connection.execute("""
+        SELECT topic, COUNT(*) as count, AVG(learning_gap_score) as avg_gap,
+               SUM(CASE WHEN gap_category = 'High Gap' THEN 1 ELSE 0 END) as high_count,
+               SUM(CASE WHEN gap_category = 'Medium Gap' THEN 1 ELSE 0 END) as med_count,
+               SUM(CASE WHEN gap_category = 'Low Gap' THEN 1 ELSE 0 END) as low_count
+        FROM learning_gaps
+        GROUP BY topic
+        ORDER BY avg_gap DESC
+    """).fetchall()
+
+    # Hidden learning gaps across cohort: high overall average (>= 70%) but severe gap (>= 45%) in a specific topic
+    hidden_gap_students = connection.execute("""
+        SELECT s.student_id, s.name, lg.topic, s.average_quiz_score as overall_avg, lg.learning_gap_score
+        FROM students s
+        JOIN learning_gaps lg ON s.student_id = lg.student_id
+        WHERE s.average_quiz_score >= 70.0 AND lg.learning_gap_score >= 45.0
+        ORDER BY lg.learning_gap_score DESC
+        LIMIT 10
+    """).fetchall()
+
     students = connection.execute("""
         SELECT *
         FROM students
@@ -142,6 +186,10 @@ def dashboard():
     """).fetchall()
 
     connection.close()
+
+    # Load experimental model comparison metrics and SHAP importance
+    model_metrics = load_model_comparison_metrics()
+    shap_features = load_shap_feature_importance()
 
     return render_template(
         "dashboard.html",
@@ -155,6 +203,14 @@ def dashboard():
         flagged_proctoring_count=flagged_proctoring_count,
         pending_evaluations=pending_evaluations,
         total_yt_resources=total_yt_resources,
+        total_gaps_count=total_gaps_count,
+        high_gap_count=high_gap_count,
+        med_gap_count=med_gap_count,
+        low_gap_count=low_gap_count,
+        topic_gap_analysis=topic_gap_analysis,
+        hidden_gap_students=hidden_gap_students,
+        model_metrics=model_metrics,
+        shap_features=shap_features,
         students=students,
         current_student=None
     )
@@ -461,12 +517,33 @@ def student_details(student_id):
             ORDER BY id DESC LIMIT 6
         """, (student_id,)).fetchall()
 
+    # Enhanced gap diagnostics: BKT topic mastery, Hidden Gap detection, and SHAP rationale
+    overall_avg = float(student["average_quiz_score"]) if student else 50.0
+    enhanced_gaps = []
+    for g in gaps:
+        gap_score = float(g["learning_gap_score"])
+        is_hidden = bool(overall_avg >= 70.0 and gap_score >= 45.0)
+        # BKT estimated mastery
+        bkt_mastery = round(max(0.05, min(0.95, (100.0 - gap_score) / 100.0)), 2)
+        enhanced_gaps.append({
+            "id": g["id"],
+            "student_id": g["student_id"],
+            "topic": g["topic"],
+            "learning_gap_score": gap_score,
+            "gap_category": g["gap_category"],
+            "priority": g["priority"],
+            "bkt_mastery": bkt_mastery,
+            "bkt_mastery_pct": int(bkt_mastery * 100),
+            "is_hidden_gap": is_hidden,
+            "gap_differential": round(overall_avg - (100.0 - gap_score), 1)
+        })
+
     connection.close()
 
     return render_template(
         "student.html",
         student=student,
-        gaps=gaps,
+        gaps=enhanced_gaps,
         recommendations=recommendations,
         guidance_history=guidance_history,
         assessment_history=assessment_history,
@@ -1026,10 +1103,16 @@ def analytics_page():
     all_students = connection.execute("SELECT student_id, name, overall_risk, average_learning_gap, average_quiz_score, average_assignment_score, average_attendance FROM students ORDER BY student_id ASC LIMIT 50").fetchall()
     
     connection.close()
+
+    model_metrics = load_model_comparison_metrics()
+    shap_features = load_shap_feature_importance()
+
     return render_template(
         "analytics.html",
         history_records=history_records,
-        students=all_students
+        students=all_students,
+        model_metrics=model_metrics,
+        shap_features=shap_features
     )
 
 @app.route("/api/predict-risk", methods=["POST"])
@@ -1038,6 +1121,29 @@ def api_predict_risk():
     data = request.get_json() or {}
     prediction_result = predict_student_risk(data)
     return jsonify(prediction_result)
+
+@app.route("/api/predict-topic-gap", methods=["POST"])
+@login_required
+def api_predict_topic_gap():
+    """
+    Proposed TAT-KG Hybrid Inference API:
+    Evaluates student topic activity using Bayesian Knowledge Tracing,
+    PyTorch GRU temporal modeling, LightGBM multi-class classification,
+    and SHAP explainability.
+    """
+    data = request.get_json() or {}
+    topic_name = data.get("topic_name") or data.get("topic") or "SQL Joins"
+    result = predict_topic_learning_gap_hybrid(data, topic_name=topic_name)
+    return jsonify(result)
+
+@app.route("/reports/<path:filename>")
+@login_required
+def serve_report_file(filename):
+    """
+    Securely serves generated model evaluation charts, confusion matrix, and CSV reports.
+    """
+    reports_dir = Path("reports").resolve()
+    return send_from_directory(reports_dir, filename)
 
 @app.route("/api/record-simulation", methods=["POST"])
 @login_required
